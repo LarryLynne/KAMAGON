@@ -1,0 +1,449 @@
+/* Общие настройки */
+body {
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    font-size: 12px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: #fcfcfc;
+}
+
+/* Фиксированная верхняя часть */
+.header-panel {
+    flex-shrink: 0;
+    background: #ffffff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    z-index: 100;
+}
+
+/* --- ШАПКА И ЛОГОТИП --- */
+.top-branding {
+    background: linear-gradient(90deg, #1e293b 0%, #334155 100%); /* Глубокий сланцево-синий градиент */
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo {
+    margin: 0;
+    font-family: 'Segoe UI Black', 'Arial Black', sans-serif;
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 4px; /* Делаем буквы шире для стиля */
+    color: #ffffff;
+    text-transform: uppercase;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+
+    /* ДОБАВЛЕНО: Запрет выделения текста */
+    user-select: none;
+    -webkit-user-select: none; /* Для Safari/Chrome */
+    -moz-user-select: none; /* Для Firefox */
+    -ms-user-select: none; /* Для старых Edge/IE */
+}
+
+.logo span {
+    color: #ffaa00; /* Тот самый оранжевый цвет, который мы использовали для матриц КАМАГов */
+}
+
+.global-controls {
+    padding: 8px 20px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+/* Внутренняя панель на вкладке графиков */
+.tab-controls-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    position: sticky;
+    top: 0;
+    z-index: 30; /* Выше чем th таблицы */
+}
+
+/* Чтобы шапка таблицы на первой вкладке прилипала ПОД панелью (высота панели ~54px) */
+#tableContainerRaw th {
+    top: 54px; 
+}
+
+/* Кнопка выбора файлов (лейбл) */
+.file-label {
+    height: 34px;
+    padding: 0 15px;
+    background-color: #f3e5f5; /* Бледно-фиолетовый */
+    color: #4a148c;
+    border: 1px solid #d1c4e9;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.file-label:hover { background-color: #e1bee7; }
+.file-label:active { background-color: #ce93d8; }
+
+/* Состояние, когда инпут заблокирован (до загрузки справочника) */
+.file-label.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background-color: #f5f5f5;
+    color: #9e9e9e;
+    border-color: #e0e0e0;
+}
+
+/* Стилизация кнопок управления */
+.tab-controls-panel button {
+    height: 34px;
+    padding: 0 15px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Цвета кнопок по твоему запросу (пастельные) */
+#togglePtBtn { background-color: #e3f2fd; color: #0d47a1; } /* Синий */
+#togglePtBtn:hover { background-color: #bbdefb; }
+#togglePtBtn:active { background-color: #90caf9; }
+
+#unknownRoutesBtn { background-color: #fff9c4; color: #827717; } /* Желтый */
+#unknownRoutesBtn:hover { background-color: #fff59d; }
+#unknownRoutesBtn:active { background-color: #fff176; }
+
+#updateDictBtn { background-color: #e8f5e9; color: #1b5e20; } /* Зеленый */
+#updateDictBtn:hover { background-color: #c8e6c9; }
+#updateDictBtn:active { background-color: #a5d6a7; }
+
+#generateDetailedBtn { background-color: #ffebee; color: #b71c1c; font-weight: bold; } /* Красный */
+#generateDetailedBtn:hover { background-color: #ffcdd2; }
+#generateDetailedBtn:active { background-color: #ef9a9a; }
+
+/* Вкладки */
+.tabs {
+    display: flex;
+    padding: 0 20px;
+    background: #f1f3f5;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    color: #495057;
+    position: relative;
+    transition: background-color 0.2s, color 0.2s;
+    border-right: 1px solid #dee2e6;
+}
+
+/* Подсветка при наведении на вкладку */
+.tab-btn:hover {
+    background-color: #e9ecef;
+    color: #000;
+}
+
+.tab-btn.active {
+    background: #fff;
+    color: #212529;
+    font-weight: 600;
+    border-top: 3px solid #4caf50;
+    margin-top: -1px;
+}
+
+/* Зона таблиц */
+.main-content {
+    flex-grow: 1;
+    position: relative;
+    background-color: #fff;
+}
+
+.table-container {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    overflow: auto;
+    /* Убрали padding, чтобы липкая шапка работала идеально ровно */
+}
+
+/* Идеальное центрирование без растягивания */
+table {
+    border-collapse: collapse;
+    white-space: nowrap;
+    border: 1px solid #dee2e6;
+    margin: 0 auto; /* ИСПРАВЛЕНО: было 20px auto, из-за этого был прыжок */
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    width: max-content; 
+}
+
+/* Возвращаем компактную высоту строк */
+th, td {
+    border: 1px solid #dee2e6;
+    padding: 3px 8px; /* Сделали строки узкими (было 6px 10px) */
+    line-height: 1.2;
+}
+
+/* ИДЕАЛЬНАЯ ЛИПКАЯ ШАПКА ДЛЯ ВСЕХ ВКЛАДОК */
+th {
+    background-color: #f8f9fa;
+    color: #343a40;
+    font-weight: 600;
+    text-align: center;
+    position: sticky;
+    top: 0; /* Прилипает ровно к верху без щелей и прыжков */
+    z-index: 20;
+    box-shadow: inset 0 -1px 0 #dee2e6, 0 1px 2px rgba(0,0,0,0.1); /* Красивая граница снизу */
+}
+
+/* Вспомогательные стили */
+.col-route { font-weight: 500; color: #2c3e50; }
+.day-on { background-color: #e8f5e9 !important; color: #2e7d32; text-align: center; font-weight: bold; }
+.day-off { color: #dee2e6; text-align: center; }
+.pt-col { background-color: #fcfcfc; }
+.hide-pt .pt-col { display: none; }
+
+tr:hover td { background-color: #f8f9fa !important; }
+
+/* --- МАКСИМАЛЬНО КОМПАКТНАЯ ТАБЛИЦА КАМАГОВ --- */
+.kamag-cell {
+    text-align: center;
+    width: 20px; /* Сузили ячейки */
+    height: 16px; /* Сплюснули ячейки */
+    padding: 0 !important; /* Убиваем глобальные отступы для этих ячеек */
+    font-size: 10px; /* Уменьшили шрифт */
+}
+
+.kamag-active {
+    background-color: #ffaa00;
+    font-weight: bold;
+    color: #000;
+}
+
+.kamag-header-vertical {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    padding: 2px !important;
+    height: 35px; /* Зменшили висоту вдвічі */
+    font-size: 10px;
+}
+
+/* Немного отступа для контролов на вкладке КАМАГов */
+#tableContainerKamag > div:first-child {
+    margin: 20px 20px 0 20px;
+}
+
+/* =========================================
+   ВОЗВРАЩЕННЫЕ СТИЛИ (Модалка, Прогресс, КАМАГи, Сортировка)
+   ========================================= */
+
+/* --- Модальное окно --- */
+.modal {
+    display: none; /* Скрываем по умолчанию */
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5); /* Полупрозрачный фон */
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    position: relative;
+}
+
+.close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-btn:hover { color: #333; }
+
+/* --- Прогресс-бар --- */
+.progress-container {
+    width: 150px;
+    height: 10px;
+    background-color: #e9ecef;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-left: 10px;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #4caf50;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.progress-animated {
+    background-image: linear-gradient(45deg, rgba(255,255,255,.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.15) 50%, rgba(255,255,255,.15) 75%, transparent 75%, transparent);
+    background-size: 1rem 1rem;
+    animation: progress-stripes 1s linear infinite;
+}
+
+@keyframes progress-stripes {
+    from { background-position: 1rem 0; }
+    to { background-position: 0 0; }
+}
+
+/* --- Сортировка таблиц --- */
+th.sortable {
+    cursor: pointer;
+    /* Убрали position: relative, так как он убивал position: sticky! */
+    padding-right: 15px;
+    transition: background-color 0.2s;
+}
+
+th.sortable:hover {
+    background-color: #e2e6ea !important;
+}
+
+th.sort-asc::after {
+    content: " ▲";
+    position: absolute;
+    right: 4px;
+    font-size: 10px;
+    color: #000;
+}
+
+th.sort-desc::after {
+    content: " ▼";
+    position: absolute;
+    right: 4px;
+    font-size: 10px;
+    color: #000;
+}
+
+/* Стилизация выпадающих списков и полей ввода */
+select, input[type="number"] {
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    background-color: #fff;
+    font-size: 12px;
+    color: #495057;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+select:focus, input[type="number"]:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Группа для интервала */
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #495057;
+    font-weight: 500;
+}
+
+.control-group input {
+    width: 50px;
+    text-align: center;
+}
+
+/* Текст статуса */
+#fileStatus {
+    font-size: 11px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Красивые селекты на вкладке КАМАГов */
+#tableContainerKamag select {
+    min-width: 150px;
+    border-color: #adb5bd;
+}
+
+/* Прокачані текстові фільтри */
+.filter-input {
+    width: 100%;
+    min-width: 30px;
+    max-width: 90px; /* Захищає від розтягування колонок */
+    box-sizing: border-box;
+    padding: 3px 4px;
+    margin-top: 4px;
+    font-size: 11px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-weight: normal;
+    color: #333;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.1rem rgba(0,123,255,.25);
+}
+
+/* Щоб текст і інпути стояли рівно в шапці */
+th {
+    vertical-align: top;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+}
+
+/* Кнопка експорту при наведенні */
+#exportExcelBtn:hover {
+    background-color: #c8e6c9 !important;
+}
+#exportExcelBtn:active {
+    background-color: #a5d6a7 !important;
+}
+
+/* Жорстке обмеження ширини для колонок днів тижня */
+th.col-day, td.col-day {
+    width: 35px !important;
+    min-width: 35px !important;
+    max-width: 35px !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+    text-align: center;
+}
+
+/* Робимо інпут у цих колонках ще меншим і центруємо текст */
+th.col-day .filter-input {
+    min-width: 25px;
+    max-width: 30px;
+    padding: 3px 2px;
+    text-align: center;
+}
