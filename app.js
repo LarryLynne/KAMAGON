@@ -802,8 +802,8 @@ function generateYardEvents() {
                     
                     addEvent(item.yardB, "Забір з-під вивантаження", endMins, item.originalCode);
                     
-                    let moveTimeMins = (yardDictionary[item.nodeB] && yardDictionary[item.nodeB].move !== undefined) ? yardDictionary[item.nodeB].move : 5;
-                    addEvent(item.yardB, "Переїзд на зону пустих контейнерів", endMins + moveTimeMins, item.originalCode);
+                    /*let moveTimeMins = (yardDictionary[item.nodeB] && yardDictionary[item.nodeB].move !== undefined) ? yardDictionary[item.nodeB].move : 5;
+                    addEvent(item.yardB, "Переїзд на зону пустих контейнерів", endMins + moveTimeMins, item.originalCode);*/
                 }
             }
         }
