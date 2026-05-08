@@ -999,38 +999,79 @@ function renderKamagTable() {
         if (!ctx) return;
 
         const chartLabels = [];
-        const chartData = [];
+        const opsData = [];
+        const kamagLineData = [];
+
         for (let h = 0; h < 24; h++) {
             chartLabels.push(`${h}:00`);
-            const val = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
-            chartData.push(val);
+            
+            // Дані для операцій
+            const opsVal = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
+            opsData.push(opsVal);
+
+            // Дані для КАМАГів
+            const kamagVal = (kamagData[yard] && kamagData[yard][d]) ? kamagData[yard][d][h] : 0;
+            kamagLineData.push(kamagVal);
         }
 
         const newChart = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: chartLabels,
-                datasets: [{
-                    data: chartData,
-                    backgroundColor: '#ffc107',
-                    borderColor: '#ffaa00',
-                    borderWidth: 1,
-                    borderRadius: 2
-                }]
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'КАМАГи',
+                        data: kamagLineData,
+                        borderColor: '#dc3545', // Червона лінія
+                        backgroundColor: '#dc3545',
+                        borderWidth: 2,
+                        tension: 0.3, // Легке заокруглення
+                        pointRadius: 2,
+                        pointHoverRadius: 4,
+                        yAxisID: 'y1' // Друга незалежна вісь
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Операції',
+                        data: opsData,
+                        backgroundColor: 'rgba(255, 193, 7, 0.7)', // Трохи прозорий, щоб було видно лінію
+                        borderColor: '#ffaa00',
+                        borderWidth: 1,
+                        borderRadius: 2,
+                        yAxisID: 'y' // Основна вісь
+                    }
+                ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index', // Показує тултип для обох графіків відразу
+                    intersect: false,
+                },
                 scales: {
-                    y: { display: false, beginAtZero: true }, // Вісь Y прихована для компактності
-                    x: { display: false } // Вісь X прихована (години вже є в шапці таблиці)
+                    x: { display: false },
+                    y: { 
+                        type: 'linear', 
+                        display: false, 
+                        position: 'left', 
+                        beginAtZero: true 
+                    },
+                    y1: { 
+                        type: 'linear', 
+                        display: false, 
+                        position: 'right', 
+                        beginAtZero: true,
+                        grid: { drawOnChartArea: false } // Щоб сітки не перетиналися
+                    }
                 },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
                             title: (items) => `${d} ${items[0].label}`,
-                            label: (item) => `Операцій: ${item.raw}`
+                            label: (item) => `${item.dataset.label}: ${item.raw}`
                         }
                     }
                 },

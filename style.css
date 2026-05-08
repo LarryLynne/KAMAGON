@@ -447,3 +447,30 @@ th.col-day .filter-input {
     padding: 3px 2px;
     text-align: center;
 }
+
+/* Кнопка настроек (ссылка) */
+.settings-btn {
+    height: 34px;
+    padding: 0 15px;
+    background-color: #fff3e0; 
+    color: #e65100;
+    border: 1px solid #ffe0b2;
+    border-radius: 6px;
+    font-size: 12px;
+    /*font-weight: bold;*/
+    text-decoration: none; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box; 
+    transition: all 0.2s ease;
+}
+
+.settings-btn:hover {
+    background-color: #ffe0b2;
+    color: #bf360c;
+}
+
+.settings-btn:active {
+    background-color: #ffcc80;
+}
