@@ -770,6 +770,9 @@ function generateYardEvents() {
     };
 
     detailedSchedules.forEach(item => {
+        // 👇 ДОБАВЛЕНА ПРОВЕРКА: Пропускаем всё, что не "Шасі BDF"
+        if (item.vehicle !== "Шасі BDF") return;
+
         // --- ПОДІЇ ДЛЯ ТОЧКИ А (ЗАВАНТАЖЕННЯ) ---
         if (item.yardA && item.yardA !== "—") {
             if (item.timePlacementA && item.timePlacementA !== "—") {
@@ -801,9 +804,6 @@ function generateYardEvents() {
                     const endMins = getAbsoluteMinutes(parts[0], parts[1]);
                     
                     addEvent(item.yardB, "Забір з-під вивантаження", endMins, item.originalCode);
-                    
-                    /*let moveTimeMins = (yardDictionary[item.nodeB] && yardDictionary[item.nodeB].move !== undefined) ? yardDictionary[item.nodeB].move : 5;
-                    addEvent(item.yardB, "Переїзд на зону пустих контейнерів", endMins + moveTimeMins, item.originalCode);*/
                 }
             }
         }
