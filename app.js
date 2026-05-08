@@ -329,7 +329,8 @@ document.getElementById('unknownRoutesBtn').addEventListener('click', () => {
     // Перевіряємо по оригінальному масиву (щоб фільтри не заважали пошуку помилок)
     allSchedules.forEach(item => {
         if (item.schema === "Схема не знайдена") {
-            unknownSet.add(`${item.route} (Доставка: ${item.deliveryType})`);
+            // Склеюємо маршрут і тип ТЗ через спецсимвол "|", щоб Set автоматично прибрав дублікати
+            unknownSet.add(`${item.route}|${item.vehicleType}`);
         }
     });
 
@@ -339,10 +340,33 @@ document.getElementById('unknownRoutesBtn').addEventListener('click', () => {
         currentUnknownRoutesText = "";
     } else {
         copyBtn.style.display = 'inline-block'; 
-        currentUnknownRoutesText = Array.from(unknownSet).join('\n');
-        let html = `<table><thead><tr><th>Невідомий маршрут</th></tr></thead><tbody>`;
-        unknownSet.forEach(route => html += `<tr><td>${route}</td></tr>`);
-        html += `</tbody></table>`;
+        
+        let tableRows = "";
+        let copyLines = [];
+        
+        unknownSet.forEach(entry => {
+            const [route, vehicle] = entry.split('|');
+            tableRows += `<tr>
+                <td style="text-align: left; padding: 6px 10px;">${route}</td>
+                <td style="text-align: center; padding: 6px 10px;">${vehicle}</td>
+            </tr>`;
+            // Табуляція (\t) дозволяє вставити скопійований текст в Excel відразу у дві різні колонки
+            copyLines.push(`${route}\t${vehicle}`); 
+        });
+        
+        currentUnknownRoutesText = copyLines.join('\n');
+        
+        let html = `<table style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Маршрут</th>
+                    <th>Тип ТЗ</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRows}
+            </tbody>
+        </table>`;
         container.innerHTML = html;
     }
     unknownModal.style.display = 'block';
@@ -365,7 +389,6 @@ copyBtn.addEventListener('click', () => {
 
 closeBtn.addEventListener('click', () => unknownModal.style.display = 'none');
 window.addEventListener('click', (event) => { if (event.target === unknownModal) unknownModal.style.display = 'none'; });
-
 // --- Оновлення довідника ---
 document.getElementById('updateDictBtn').addEventListener('click', async function() {
     const btn = this;
