@@ -1335,12 +1335,22 @@ function renderKamagTable() {
         return html;
     }
 
+    // Збираємо рядки для матриці флоту
+    const hideVirtual = document.getElementById('hideVirtualFleet').checked;
     const rowHeaders = [];
-    for(let i=1; i<=availK; i++) rowHeaders.push(`Kamag ${i}`);
-    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
-    for(let i=availK+1; i<=totalK; i++) rowHeaders.push(`Kamag ${i} (дод.)`); // Выводим дефицит
     
-    let fleetHTML = generateMatrixHTML(`Задіяність флоту (Машини)`, rowHeaders, (row, day, hour) => {
+    // 1. Фізичні камаги
+    for(let i=1; i<=availK; i++) rowHeaders.push(`Kamag ${i}`);
+    
+    // 2. Фізичні маневрові
+    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
+    
+    // 3. Віртуальні (додаткові) камаги - показуємо тільки якщо чек-бокс НЕ активний
+    if (!hideVirtual) {
+        for(let i=availK+1; i<=totalK; i++) rowHeaders.push(`Kamag ${i} (дод.)`);
+    }
+    
+    let fleetHTML = generateMatrixHTML(`Флот`, rowHeaders, (row, day, hour) => {
         if (!fleetActiveState[yard][day] || !fleetActiveState[yard][day][hour]) return 0;
         const isKamag = row.startsWith("Kamag");
         const match = row.match(/\d+/);
@@ -1349,7 +1359,7 @@ function renderKamagTable() {
         return (isKamag ? state.kamag[idx] : state.man[idx]) ? 1 : 0;
     });
 
-    const opsHTML = generateMatrixHTML(`Кількість операцій (всього)`, ["Всього операцій", "Непокриті (фіз. флот)", "Непокриті (залишок)"], (row, day, hour) => {
+    const opsHTML = generateMatrixHTML(`Операції`, ["Всього операцій", "Непокриті (фіз. флот)", "Непокриті (залишок)"], (row, day, hour) => {
         const totalOps = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
         
         if (row === "Всього операцій") {
@@ -1437,6 +1447,7 @@ document.getElementById('kamagYardSelect').addEventListener('change', renderKama
 // КЛИКИ ПО МАТРИЦЕ ФЛОТА
 document.getElementById('kamagTableWrapper').addEventListener('click', function(e) {
     if (e.target.classList.contains('kamag-editable')) {
+        if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
         const cell = e.target;
         const yard = cell.getAttribute('data-yard');
         const day = cell.getAttribute('data-day');
@@ -2108,3 +2119,5 @@ document.getElementById('saveAllGoogleBtn').addEventListener('click', async () =
 document.addEventListener('DOMContentLoaded', () => {
     tabKamag.click();
 });
+
+document.getElementById('hideVirtualFleet').addEventListener('change', renderKamagTable);
