@@ -1259,7 +1259,19 @@ function renderKamagTable() {
 
     function generateMatrixHTML(title, rowHeaders, dataProvider, includeCharts = false) {
         let html = `<h3 style="margin: 5px 0 5px 0; color: #334155; border-left: 4px solid #ffaa00; padding-left: 10px;">${title}</h3><table><thead><tr><th style="min-width: 120px;"></th>`;
-        daysOfWeek.forEach(d => html += `<th colspan="25" style="text-align: center; font-weight: bold; background-color: #e9ecef; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d;">${d}</th>`);
+        
+        const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+        
+        daysOfWeek.forEach(d => {
+            const [dd, mm, yyyy] = d.split('.');
+            const dateObj = new Date(yyyy, mm - 1, dd);
+            const dayName = dayNamesShort[dateObj.getDay()];
+            
+            html += `<th colspan="25" style="text-align: center; font-weight: bold; background-color: #e9ecef; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d; padding: 4px 0;">
+                ${d}<br><span style="font-size: 11px; font-weight: normal; color: #6c757d;">${dayName}</span>
+            </th>`;
+        });
+        
         html += `<th style="text-align: center; line-height: 1.2;">Всього</th></tr><tr><th style="font-size: 10px;">Рядок / Година</th>`;
         daysOfWeek.forEach(d => {
             for (let i = 0; i < 24; i++) {
@@ -1337,18 +1349,36 @@ function renderKamagTable() {
         return (isKamag ? state.kamag[idx] : state.man[idx]) ? 1 : 0;
     });
 
-    const opsHTML = generateMatrixHTML(`Кількість операцій (всього)`, ["Всього операцій", "Непокриті операції"], (row, day, hour) => {
+    const opsHTML = generateMatrixHTML(`Кількість операцій (всього)`, ["Всього операцій", "Непокриті (фіз. флот)", "Непокриті (залишок)"], (row, day, hour) => {
+        const totalOps = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
+        
         if (row === "Всього операцій") {
-            return (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
+            return totalOps;
+        }
+
+        let capPhysical = 0;
+        let capTotal = 0;
+
+        if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][hour]) {
+            const st = fleetActiveState[yard][day][hour];
+            
+            // Вважаємо тільки фізичний флот (сині)
+            const activePhysK = st.kamag.slice(0, availK).filter(Boolean).length;
+            const activePhysM = st.man.filter(Boolean).length;
+            capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
+
+            // Вважаємо весь флот (сині + оранжеві)
+            const activeTotalK = st.kamag.filter(Boolean).length;
+            capTotal = (activeTotalK * yardNorms.k) + (activePhysM * yardNorms.m);
+        }
+
+        if (row === "Непокриті (фіз. флот)") {
+            const uncoveredPhys = Math.max(0, totalOps - capPhysical);
+            // Використовуємо інший ID для кліків
+            return `<span id="uncovered_phys_${day}_${hour}" class="${uncoveredPhys > 0 ? 'uncovered-alert' : ''}">${uncoveredPhys > 0 ? uncoveredPhys : ''}</span>`;
         } else {
-            const totalOps = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
-            let cap = 0;
-            if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][hour]) {
-                cap += fleetActiveState[yard][day][hour].kamag.filter(Boolean).length * yardNorms.k;
-                cap += fleetActiveState[yard][day][hour].man.filter(Boolean).length * yardNorms.m;
-            }
-            const uncovered = Math.max(0, totalOps - cap);
-            return `<span id="uncovered_${day}_${hour}" class="${uncovered > 0 ? 'uncovered-alert' : ''}">${uncovered > 0 ? uncovered : ''}</span>`;
+            const uncoveredAbs = Math.max(0, totalOps - capTotal);
+            return `<span id="uncovered_abs_${day}_${hour}" class="${uncoveredAbs > 0 ? 'uncovered-alert' : ''}">${uncoveredAbs > 0 ? uncoveredAbs : ''}</span>`;
         }
     }, true);
 
@@ -1439,14 +1469,27 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
         }
 
         const totalOps = totalOpsData[yard][day][hour] || 0;
-        let cap = fleetActiveState[yard][day][hour].kamag.filter(Boolean).length * yardNorms.k;
-        cap += fleetActiveState[yard][day][hour].man.filter(Boolean).length * yardNorms.m;
         
-        const uncovered = Math.max(0, totalOps - cap);
-        const uncoveredCell = document.getElementById(`uncovered_${day}_${hour}`);
-        if (uncoveredCell) {
-            uncoveredCell.innerText = uncovered > 0 ? uncovered : '';
-            uncoveredCell.className = uncovered > 0 ? 'uncovered-alert' : '';
+        // Перераховуємо фізичну та загальну потужність
+        const capPhysical = fleetActiveState[yard][day][hour].kamag.slice(0, availK).filter(Boolean).length * yardNorms.k +
+                            fleetActiveState[yard][day][hour].man.filter(Boolean).length * yardNorms.m;
+        const capTotal = fleetActiveState[yard][day][hour].kamag.filter(Boolean).length * yardNorms.k +
+                         fleetActiveState[yard][day][hour].man.filter(Boolean).length * yardNorms.m;
+        
+        // Оновлюємо рядок фізичного дефіциту
+        const uncoveredPhys = Math.max(0, totalOps - capPhysical);
+        const uncoveredPhysCell = document.getElementById(`uncovered_phys_${day}_${hour}`);
+        if (uncoveredPhysCell) {
+            uncoveredPhysCell.innerText = uncoveredPhys > 0 ? uncoveredPhys : '';
+            uncoveredPhysCell.className = uncoveredPhys > 0 ? 'uncovered-alert' : '';
+        }
+
+        // Оновлюємо рядок абсолютного дефіциту
+        const uncoveredAbs = Math.max(0, totalOps - capTotal);
+        const uncoveredAbsCell = document.getElementById(`uncovered_abs_${day}_${hour}`);
+        if (uncoveredAbsCell) {
+            uncoveredAbsCell.innerText = uncoveredAbs > 0 ? uncoveredAbs : '';
+            uncoveredAbsCell.className = uncoveredAbs > 0 ? 'uncovered-alert' : '';
         }
 
         // Вычисляем индекс дня динамически на основе реальных дат
@@ -1685,13 +1728,19 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             rowDays.getCell(1).font = { bold: true };
             rowDays.getCell(1).alignment = alignCenter;
 
+            const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
             days.forEach((d, index) => {
                 const startCol = 2 + index * 25;
                 const endCol = startCol + 24;
                 sheet.mergeCells(3, startCol, 3, endCol); 
                 
+                const [dd, mm, yyyy] = d.split('.');
+                const dateObj = new Date(yyyy, mm - 1, dd);
+                const dayName = dayNamesShort[dateObj.getDay()];
+                
                 const cell = sheet.getCell(3, startCol);
-                cell.value = d;
+                cell.value = `${d} (${dayName})`; // Буде виглядати як "14.05.2026 (Чт)"
                 cell.alignment = alignCenter;
                 cell.font = { bold: true };
                 cell.fill = fillHeader;
@@ -1861,48 +1910,76 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             wOpsSumCell.fill = fillHeader;
 
             // --- ДОБАВЛЕНО: ЭКСПОРТ НЕПОКРЫТЫХ ОПЕРАЦИЙ (ДЕФИЦИТ) ---
-            const uncoveredRow = sheet.addRow(["Непокриті операції"]);
-            uncoveredRow.getCell(1).font = { bold: true, size: 10 };
+            const uncoveredPhysRow = sheet.addRow(["Непокриті (фіз. флот)"]);
+            uncoveredPhysRow.getCell(1).font = { bold: true, size: 10 };
             
-            let totalWeekUncovered = 0;
-            let uCol = 2;
+            let totalWeekUncoveredPhys = 0;
+            let uColPhys = 2;
             
             days.forEach(d => {
                 let daySum = 0;
                 for (let h = 0; h < 24; h++) {
                     let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
-                    let cap = 0;
+                    let capPhysical = 0;
                     if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
-                        cap += fleetActiveState[yard][d][h].kamag.filter(Boolean).length * yardNorms.k;
-                        cap += fleetActiveState[yard][d][h].man.filter(Boolean).length * yardNorms.m;
+                        capPhysical += fleetActiveState[yard][d][h].kamag.slice(0, availK).filter(Boolean).length * yardNorms.k;
+                        capPhysical += fleetActiveState[yard][d][h].man.filter(Boolean).length * yardNorms.m;
                     }
-                    let uncovered = Math.max(0, totalOps - cap);
+                    let uncovered = Math.max(0, totalOps - capPhysical);
 
-                    const cell = uncoveredRow.getCell(uCol);
+                    const cell = uncoveredPhysRow.getCell(uColPhys);
                     cell.value = uncovered || "";
                     cell.alignment = alignCenter;
                     cell.border = getBorders(h === 0, false);
-                    
-                    if (uncovered > 0) {
-                        cell.fill = fillUncovered;
-                        cell.font = fontUncovered;
-                    }
+                    if (uncovered > 0) { cell.fill = fillUncovered; cell.font = fontUncovered; }
                     
                     daySum += uncovered;
-                    totalWeekUncovered += uncovered;
-                    uCol++;
+                    totalWeekUncoveredPhys += uncovered;
+                    uColPhys++;
                 }
-                const dSumCell = uncoveredRow.getCell(uCol);
+                const dSumCell = uncoveredPhysRow.getCell(uColPhys);
                 dSumCell.value = daySum || "";
-                dSumCell.alignment = alignCenter;
-                dSumCell.font = { bold: true };
-                dSumCell.fill = fillSum;
-                dSumCell.border = getBorders(false, true);
-                uCol++;
+                dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
+                uColPhys++;
             });
+            const wUncoveredPhysSumCell = uncoveredPhysRow.getCell(uColPhys);
+            wUncoveredPhysSumCell.value = totalWeekUncoveredPhys; wUncoveredPhysSumCell.alignment = alignCenter; wUncoveredPhysSumCell.font = { bold: true }; wUncoveredPhysSumCell.fill = fillHeader;
+
+            // --- ЭКСПОРТ НЕПОКРЫТЫХ ОПЕРАЦИЙ (АБСОЛЮТНЫЙ ЗАЛИШОК) ---
+            const uncoveredAbsRow = sheet.addRow(["Непокриті (залишок)"]);
+            uncoveredAbsRow.getCell(1).font = { bold: true, size: 10 };
             
-            const wUncoveredSumCell = uncoveredRow.getCell(uCol);
-            wUncoveredSumCell.value = totalWeekUncovered;
+            let totalWeekUncoveredAbs = 0;
+            let uColAbs = 2;
+            
+            days.forEach(d => {
+                let daySum = 0;
+                for (let h = 0; h < 24; h++) {
+                    let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
+                    let capTotal = 0;
+                    if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
+                        capTotal += fleetActiveState[yard][d][h].kamag.filter(Boolean).length * yardNorms.k;
+                        capTotal += fleetActiveState[yard][d][h].man.filter(Boolean).length * yardNorms.m;
+                    }
+                    let uncovered = Math.max(0, totalOps - capTotal);
+
+                    const cell = uncoveredAbsRow.getCell(uColAbs);
+                    cell.value = uncovered || "";
+                    cell.alignment = alignCenter;
+                    cell.border = getBorders(h === 0, false);
+                    if (uncovered > 0) { cell.fill = fillUncovered; cell.font = fontUncovered; }
+                    
+                    daySum += uncovered;
+                    totalWeekUncoveredAbs += uncovered;
+                    uColAbs++;
+                }
+                const dSumCell = uncoveredAbsRow.getCell(uColAbs);
+                dSumCell.value = daySum || "";
+                dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
+                uColAbs++;
+            });
+            const wUncoveredAbsSumCell = uncoveredAbsRow.getCell(uColAbs);
+            wUncoveredAbsSumCell.value = totalWeekUncoveredAbs; wUncoveredAbsSumCell.alignment = alignCenter; wUncoveredAbsSumCell.font = { bold: true }; wUncoveredAbsSumCell.fill = fillHeader;
             wUncoveredSumCell.alignment = alignCenter;
             wUncoveredSumCell.font = { bold: true };
             wUncoveredSumCell.fill = fillHeader;
