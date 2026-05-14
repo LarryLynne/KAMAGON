@@ -12,11 +12,11 @@
 <body>
     <div class="header-panel">
         <div class="top-branding">
-            <h1 class="logo">KAMAG<span>ON</span></h1>
+            <h1 class="logo">KAMAG<span>ON</span> <span id="loginBtn">🔑</span></h1>
         </div>
 
         <div class="global-controls">
-            <label for="fileInput" class="file-label" id="fileInputLabel">
+            <label for="fileInput" class="file-label auth-hidden" id="fileInputLabel">
                 Вибрати файли
             </label>
             <input type="file" id="fileInput" multiple accept=".xlsx, .xls" style="display: none;">
@@ -27,23 +27,21 @@
                 <div id="progressBar" class="progress-bar"></div>
             </div>
 
-           
-
-            <button id="exportExcelBtn" class="tab-btn" style="margin-left: auto; background-color: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 6px; font-weight: bold; padding: 6px 15px; cursor: pointer;">
+            <button id="exportExcelBtn" class="tab-btn btn-action btn-export">
                 Експорт в Excel
             </button>
         </div>
 
         <div class="tabs">
-            <button class="tab-btn active" id="tabRaw">Графіки</button>
-            <button class="tab-btn" id="tabDetailed">Рейси контейнерів</button>
-            <button class="tab-btn" id="tabEvents">Події</button>
-            <button class="tab-btn" id="tabKamag">Розрахунок</button>
+            <button class="tab-btn auth-hidden" id="tabRaw">Графіки</button>
+            <button class="tab-btn auth-hidden" id="tabDetailed">Рейси контейнерів</button>
+            <button class="tab-btn auth-hidden" id="tabEvents">Події</button>
+            <button class="tab-btn active" id="tabKamag">Розрахунок</button>
         </div>
     </div>
 
     <div class="main-content">
-        <div id="tableContainerRaw" class="table-container">
+        <div id="tableContainerRaw" class="table-container" style="display: none;">
             <div class="tab-controls-panel">
                 <button id="togglePtBtn">Пром. точки</button>
                 <button id="unknownRoutesBtn">Невідомі маршрути</button>
@@ -62,21 +60,19 @@
         <div id="tableContainerDetailed" class="table-container" style="display: none;"></div>
         <div id="tableContainerEvents" class="table-container" style="display: none;"></div>
         <div id="tableContainerKamag" class="table-container" style="display: none; flex-direction: column;">
-            <div style="margin-bottom: 15px; padding: 10px; background: #fff; border: 1px solid #ccc;">
-                <label style="font-weight: bold;">Автодвір: 
-                    <select id="kamagYardSelect" style="margin-right: 20px; padding: 4px;"></select>
+            <div class="kamag-controls-panel">
+                <label>Автодвір: 
+                    <select id="kamagYardSelect"></select>
                 </label>
-                <label style="font-weight: bold; display: none;">День: 
-                    <select id="kamagDaySelect" style="padding: 4px;">
-                        <option value="Пн">Понеділок</option>
-                        <option value="Вт">Вівторок</option>
-                        <option value="Ср">Середа</option>
-                        <option value="Чт">Четвер</option>
-                        <option value="Пт">П'ятниця</option>
-                        <option value="Сб">Субота</option>
-                        <option value="Нд">Неділя</option>
-                    </select>
-                </label>
+                <button id="loadGoogleYardBtn" class="tab-btn btn-action btn-load">
+                    Завантажити з бази
+                </button>
+                <button id="saveGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
+                    Зберегти (поточний)
+                </button>
+                <button id="saveAllGoogleBtn" class="tab-btn btn-action btn-save-all auth-hidden">
+                    Зберегти ВСІ
+                </button>
             </div>
             <div id="kamagTableWrapper" style="overflow: auto;"></div>
         </div>
@@ -88,6 +84,47 @@
             <h2>Маршрути без схеми</h2>
             <button id="copyUnknownBtn" style="margin-bottom: 15px; padding: 6px 12px; font-weight: bold;">Копіювати список</button>
             <div id="unknownRoutesTableContainer"></div>
+        </div>
+    </div>
+
+    <div id="generateModal" class="modal">
+        <div class="modal-content generate-modal-content">
+            <span class="close-btn" id="closeGenerateModal">&times;</span>
+            <h2>Налаштування розрахунку</h2>
+            
+            <div class="form-group">
+                <label>Автодвір (фільтр):
+                    <select id="genYardSelect">
+                        <option value="ALL">Всі автодвори</option>
+                    </select>
+                </label>
+                
+                <div class="form-row">
+                    <label>З дати:
+                        <input type="date" id="genDateStart">
+                    </label>
+                    <label>По дату:
+                        <input type="date" id="genDateEnd">
+                    </label>
+                </div>
+                
+                <label class="checkbox-group">
+                    <input type="checkbox" id="genUseScheduleDates" checked>
+                    Враховувати дати дії графіків
+                </label>
+            </div>
+            
+            <button id="confirmGenerateBtn" class="btn-confirm">Порахувати розклад</button>
+        </div>
+    </div>
+
+    <div id="authModal" class="modal">
+        <div class="modal-content" style="max-width: 300px; text-align: center; margin-top: 20vh;">
+            <h2 style="border-bottom:none; margin-bottom: 5px;">Авторизація</h2>
+            <p style="color: #666; margin-bottom: 15px;">Введіть пароль для доступу</p>
+            <input type="password" id="authPassInput" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 15px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+            <button id="authConfirmBtn" class="btn-confirm">Увійти</button>
+            <button id="authCancelBtn" style="margin-top: 15px; background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px;">Скасувати</button>
         </div>
     </div>
 

@@ -1,77 +1,228 @@
+// --- АВТОРИЗАЦІЯ З ПРИХОВУВАННЯМ ---
+const APP_PASSWORD = "299792458"; 
+
+function checkAuth() {
+    return new Promise((resolve) => {
+        if (sessionStorage.getItem('kamagonAuth') === 'true') {
+            resolve(true);
+            return;
+        }
+        
+        const modal = document.getElementById('authModal');
+        const input = document.getElementById('authPassInput');
+        modal.style.display = 'block';
+        input.value = '';
+        input.focus();
+
+        document.getElementById('authConfirmBtn').onclick = () => {
+            if (input.value === APP_PASSWORD) {
+                sessionStorage.setItem('kamagonAuth', 'true');
+                modal.style.display = 'none';
+                updateAuthVisibility(); // Показываем всё
+                //document.getElementById('tabRaw').click();
+                resolve(true);
+            } else {
+                alert("Невірний пароль!");
+                input.value = '';
+            }
+        };
+
+        document.getElementById('authCancelBtn').onclick = () => {
+            modal.style.display = 'none';
+            resolve(false);
+        };
+    });
+}
+
+function updateAuthVisibility() {
+    const isAuth = sessionStorage.getItem('kamagonAuth') === 'true';
+    const loginBtn = document.getElementById('loginBtn');
+    
+    // Скрываем или показываем все защищенные элементы
+    document.querySelectorAll('.auth-hidden').forEach(el => {
+        if (isAuth) {
+            el.classList.remove('auth-hidden');
+        }
+    });
+
+    // Если авторизован — прячем ключик, он больше не нужен
+    if (isAuth && loginBtn) loginBtn.style.display = 'none';
+}
+
+// Привязываем вызов модалки к ключику
+document.getElementById('loginBtn').addEventListener('click', checkAuth);
+
+// Проверяем статус при загрузке
+document.addEventListener('DOMContentLoaded', updateAuthVisibility);
+
 // Константа с индексами (числа со скрина МИНУС 1)
 const colIdx = {
+    dateStart: 1, dateEnd: 2, // <--- НОВЫЕ СТОЛБЦЫ B и C
     route: 4, deadline: 7,
     days: [9, 10, 11, 12, 13, 14, 15],
-    points: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27], // От Старта до Конца
+    points: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
     timings: [
-        { arr: 28, dep: 29 }, // Старт
-        { arr: 35, dep: 36 }, // П.Т.1
-        { arr: 49, dep: 50 }, // П.Т.2
-        { arr: 63, dep: 64 }, // П.Т.3
-        { arr: 77, dep: 78 }, // П.Т.4
-        { arr: 91, dep: 92 }, // П.Т.5
-        { arr: 105, dep: 106 },// П.Т.6
-        { arr: 119, dep: 120 },// П.Т.7
-        { arr: 133, dep: 134 },// П.Т.8
-        { arr: 147, dep: 148 },// П.Т.9
-        { arr: 161, dep: 162 } // П.Т.10
+        { arr: 28, dep: 29 }, { arr: 35, dep: 36 }, { arr: 49, dep: 50 },
+        { arr: 63, dep: 64 }, { arr: 77, dep: 78 }, { arr: 91, dep: 92 },
+        { arr: 105, dep: 106 },{ arr: 119, dep: 120 },{ arr: 133, dep: 134 },
+        { arr: 147, dep: 148 },{ arr: 161, dep: 162 }
     ],
-    endTimings: { arr: 175, rel: 176 }, // Конец: Приїзд и Вивільнення
+    endTimings: { arr: 175, rel: 176 },
     meta: {
         delivery: 188, vehicle: 189, format: 190, code: 191, move: 196
     }
 };
 
-// Глобальный словарь для схем маршрутов
+// Функция для безопасного чтения дат из Excel
+function parseExcelDate(val) {
+    if (!val) return null;
+    if (typeof val === 'number') return new Date(Math.round((val - 25569) * 86400 * 1000));
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+// Глобальные словари
 let routeDictionary = {};
 let yardDictionary = {};
+let fleetDictionary = {}; // НОВЫЙ СЛОВАРЬ ФЛОТА
 
-// Блокируем инпут до загрузки справочника
 const fileInput = document.getElementById('fileInput');
+const DICT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT4cGlFO8YcDzdeLaqSpThqgYbTbmhDoT8LSaB4FDNsLy0cGgsCa_V-zMINs3WhpcIEA/exec';
+const RESULTS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvbyu5rzhhFiezY6_rNN9-51XZ2h0UBFx0RDMxnGif_XRz_LtU7gWOJ28_RDT4STD3vQ/exec';
+
 fileInput.disabled = true; 
 
 async function loadRouteSchemas() {
     const label = document.getElementById('fileInputLabel');
-    const fileInput = document.getElementById('fileInput');
-    
     label.classList.add('disabled');
     fileInput.disabled = true;
-
-    const scriptUrl = 'https://script.google.com/macros/s/AKfycbxT4cGlFO8YcDzdeLaqSpThqgYbTbmhDoT8LSaB4FDNsLy0cGgsCa_V-zMINs3WhpcIEA/exec'; 
+    document.getElementById('fileStatus').innerText = "Завантаження даних з хмари...";
 
     try {
-        const response = await fetch(scriptUrl);
-        const data = await response.json(); 
+        const response = await fetch(DICT_SCRIPT_URL);
+        const data = await response.json();
+        routeDictionary = data.routes;
+        yardDictionary = data.yards;
+        fleetDictionary = data.fleet || {}; // Грузим флот
+        console.log("Довідники завантажені");
         
-        if (data.routes && data.yards) {
-            routeDictionary = data.routes;
-            yardDictionary = data.yards;
-            console.log(`Довідники завантажено! Маршрутів: ${Object.keys(routeDictionary).length}`);
-        } else {
-            routeDictionary = data; 
-        }
+        await loadSavedYardsList();
         
-        if (allSchedules.length === 0) {
-            document.getElementById('fileStatus').innerText = "Довідник завантажено. Можна обирати файли.";
-        }
-        
+    } catch (e) {
+        console.error("Ошибка справочников:", e);
+        document.getElementById('fileStatus').innerText = "Помилка завантаження довідників!";
+    } finally {
         label.classList.remove('disabled');
         fileInput.disabled = false;
         
-    } catch (e) {
-        console.error("Помилка:", e);
-        document.getElementById('fileStatus').innerText = "Помилка завантаження довідника!";
+        if (document.getElementById('fileStatus').innerText === "Завантаження даних з хмари...") {
+            document.getElementById('fileStatus').innerText = "Система готова до роботи.";
+        }
     }
 }
+
+async function loadSavedYardsList() {
+    try {
+        const response = await fetch(RESULTS_SCRIPT_URL + '?action=getYards');
+        const data = await response.json();
+        
+        if (data.yards && data.yards.length > 0) {
+            const yardSelect = document.getElementById('kamagYardSelect');
+            yardSelect.innerHTML = '<option value="" disabled selected>-- Оберіть автодвір --</option>';
+            data.yards.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = y;
+                yardSelect.appendChild(opt);
+            });
+            document.getElementById('fileStatus').innerText = "Список збережених автодворів підвантажено.";
+        }
+    } catch (e) {
+        console.error("Помилка завантаження списку автодворів:", e);
+    }
+}
+
+// Загрузка данных двора (Адаптировано под флот Kamag+МАН)
+document.getElementById('loadGoogleYardBtn').addEventListener('click', async () => {
+    const yard = document.getElementById('kamagYardSelect').value;
+    const btn = document.getElementById('loadGoogleYardBtn');
+    btn.innerText = "⏳...";
+
+    try {
+        const response = await fetch(`${RESULTS_SCRIPT_URL}?action=getAggregatedData&yard=${encodeURIComponent(yard)}`);
+        const data = await response.json();
+
+        if (data.savedRows && data.savedRows.length > 0) {
+            fleetActiveState[yard] = {};
+            totalOpsData[yard] = {};
+
+            const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+            const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
+
+            // 1. Знаходимо максимальну потребу з урахуванням розбитого формату
+            let maxLoadedK = availK;
+            let maxLoadedM = availM;
+            data.savedRows.forEach(row => {
+                let countStr = String(row[3]);
+                let separator = countStr.includes('|') ? '|' : (countStr.includes('.') ? '.' : ',');
+                const counts = countStr.split(separator);
+                
+                maxLoadedK = Math.max(maxLoadedK, parseInt(counts[0], 10) || 0);
+                maxLoadedM = Math.max(maxLoadedM, parseInt(counts[1], 10) || 0);
+            });
+
+            // 2. Відновлюємо стан
+            data.savedRows.forEach(row => {
+                let [y, day, hour, fleetCountStr, ops] = row;
+                
+                let dayStr = String(day);
+                if (dayStr.includes('T') && dayStr.includes('Z')) {
+                    const d = new Date(dayStr);
+                    dayStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+                }
+
+                if (!fleetActiveState[yard][dayStr]) {
+                    fleetActiveState[yard][dayStr] = Array(24).fill(null).map(() => ({ 
+                        kamag: Array(maxLoadedK).fill(false), 
+                        man: Array(maxLoadedM).fill(false) 
+                    }));
+                    totalOpsData[yard][dayStr] = Array(24).fill(0);
+                }
+
+                totalOpsData[yard][dayStr][hour] = parseInt(ops, 10) || 0;
+                
+                // --- ФІКС МАНІВ: Розумний парсинг ---
+                let countStr = String(fleetCountStr);
+                let separator = countStr.includes('|') ? '|' : (countStr.includes('.') ? '.' : ',');
+                const counts = countStr.split(separator);
+                
+                const countK = parseInt(counts[0], 10) || 0;
+                const countM = parseInt(counts[1], 10) || 0;
+                
+                for(let k = 0; k < countK; k++) fleetActiveState[yard][dayStr][hour].kamag[k] = true;
+                for(let m = 0; m < countM; m++) fleetActiveState[yard][dayStr][hour].man[m] = true;
+            });
+
+            renderKamagTable();
+            document.getElementById('fileStatus').innerText = `Дані ${yard} завантажені!`;
+        } else {
+            alert("Даних для цього автодвору не знайдено.");
+        }
+    } catch (e) {
+        alert("Помилка завантаження");
+    } finally {
+        btn.innerText = "Завантажити з бази";
+    }
+});
 
 window.addEventListener('DOMContentLoaded', loadRouteSchemas);
 
 class Schedule {
     constructor(row) {
+        this.dateStart = parseExcelDate(row[colIdx.dateStart]); // <--- Читаем старт
+        this.dateEnd = parseExcelDate(row[colIdx.dateEnd]);     // <--- Читаем финиш
         this.route = row[colIdx.route] || "";
         this.deadline = row[colIdx.deadline] || "";
         this.days = colIdx.days.map(i => row[i] === 1 || row[i] === "1");
-        
         this.pointNames = colIdx.points.map(i => row[i] || "");
         
         this.allTimes = [];
@@ -94,13 +245,11 @@ class Schedule {
     }
 }
 
-// --- ГЛОБАЛЬНІ МАСИВИ (Оригінали та відфільтровані копії) ---
+// Глобальные массивы
 let allSchedules = [];
 let filteredAllSchedules = [];
-
 let detailedSchedules = [];
 let filteredDetailedSchedules = [];
-
 let yardEvents = [];
 let filteredYardEvents = [];
 
@@ -147,8 +296,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
 
     statusText.innerText = `Готово! Прочитано рейсів: ${allSchedules.length}`;
     progressContainer.style.display = 'none'; 
-    
-    filteredAllSchedules = [...allSchedules]; // Ініціалізуємо фільтрований масив
+    filteredAllSchedules = [...allSchedules];
     initTable();
 });
 
@@ -213,14 +361,12 @@ function processFile(file, currentFileNum, totalFilesNum, statusText, progressBa
                 }
                 processRowsChunk();
             };
-
             worker.postMessage(e.target.result);
         };
         reader.readAsArrayBuffer(file);
     });
 }
 
-// ВАЖЛИВО: Оновлено генерацію шапки таблиці (додано інпути)
 function initTable() {
     const wrapper = document.getElementById('rawTableWrapper'); 
     const container = document.getElementById('tableContainerRaw');
@@ -267,7 +413,6 @@ function initTable() {
 }
 
 function renderChunk() {
-    // Малюємо з filteredAllSchedules
     if (renderedCount >= filteredAllSchedules.length) return;
 
     const tbody = document.getElementById('tableBody');
@@ -316,7 +461,7 @@ document.getElementById('togglePtBtn').addEventListener('click', function() {
     }
 });
 
-// --- Модалка невідомих маршрутів ---
+// Модалка неизвестных маршрутов
 const unknownModal = document.getElementById('unknownRoutesModal');
 const closeBtn = document.querySelector('.close-btn');
 const copyBtn = document.getElementById('copyUnknownBtn');
@@ -325,11 +470,16 @@ let currentUnknownRoutesText = "";
 document.getElementById('unknownRoutesBtn').addEventListener('click', () => {
     const container = document.getElementById('unknownRoutesTableContainer');
     const unknownSet = new Set();
+    const routesWithBDF = new Set();
     
-    // Перевіряємо по оригінальному масиву (щоб фільтри не заважали пошуку помилок)
+    allSchedules.forEach(item => {
+        if (item.vehicleType === "Шасі BDF") {
+            routesWithBDF.add(item.route);
+        }
+    });
+
     allSchedules.forEach(item => {
         if (item.schema === "Схема не знайдена") {
-            // Склеюємо маршрут і тип ТЗ через спецсимвол "|", щоб Set автоматично прибрав дублікати
             unknownSet.add(`${item.route}|${item.vehicleType}`);
         }
     });
@@ -340,32 +490,32 @@ document.getElementById('unknownRoutesBtn').addEventListener('click', () => {
         currentUnknownRoutesText = "";
     } else {
         copyBtn.style.display = 'inline-block'; 
-        
         let tableRows = "";
         let copyLines = [];
         
         unknownSet.forEach(entry => {
             const [route, vehicle] = entry.split('|');
+            const hasBdf = routesWithBDF.has(route) ? "Так" : "Ні";
+            const bdfColor = hasBdf === "Так" ? "#2e7d32" : "#c62828"; 
+            
             tableRows += `<tr>
                 <td style="text-align: left; padding: 6px 10px;">${route}</td>
                 <td style="text-align: center; padding: 6px 10px;">${vehicle}</td>
+                <td style="text-align: center; padding: 6px 10px; font-weight: bold; color: ${bdfColor};">${hasBdf}</td>
             </tr>`;
-            // Табуляція (\t) дозволяє вставити скопійований текст в Excel відразу у дві різні колонки
-            copyLines.push(`${route}\t${vehicle}`); 
+            copyLines.push(`${route}\t${vehicle}\t${hasBdf}`); 
         });
         
         currentUnknownRoutesText = copyLines.join('\n');
-        
-        let html = `<table style="width: 100%;">
+        let html = `<table style="width: 100%; table-layout: fixed;">
             <thead>
                 <tr>
-                    <th>Маршрут</th>
-                    <th>Тип ТЗ</th>
+                    <th style="width: 60%;">Маршрут</th>
+                    <th style="width: 20%;">Тип ТЗ</th>
+                    <th style="width: 20%;">Буває Шасі BDF?</th>
                 </tr>
             </thead>
-            <tbody>
-                ${tableRows}
-            </tbody>
+            <tbody>${tableRows}</tbody>
         </table>`;
         container.innerHTML = html;
     }
@@ -389,7 +539,7 @@ copyBtn.addEventListener('click', () => {
 
 closeBtn.addEventListener('click', () => unknownModal.style.display = 'none');
 window.addEventListener('click', (event) => { if (event.target === unknownModal) unknownModal.style.display = 'none'; });
-// --- Оновлення довідника ---
+
 document.getElementById('updateDictBtn').addEventListener('click', async function() {
     const btn = this;
     const originalText = btn.innerText;
@@ -416,7 +566,7 @@ document.getElementById('updateDictBtn').addEventListener('click', async functio
     setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 2000);
 });
 
-// --- Вкладки ---
+// Вкладки
 const tabRaw = document.getElementById('tabRaw');
 const tabDetailed = document.getElementById('tabDetailed');
 const tabEvents = document.getElementById('tabEvents');
@@ -436,32 +586,89 @@ function switchTab(activeTabBtn, activeContainer) {
 }
 
 tabRaw.addEventListener('click', () => switchTab(tabRaw, containerRaw));
-tabDetailed.addEventListener('click', () => { switchTab(tabDetailed, containerDetailed); });
-tabEvents.addEventListener('click', () => { switchTab(tabEvents, containerEvents); });
-tabKamag.addEventListener('click', () => { switchTab(tabKamag, containerKamag); });
+tabDetailed.addEventListener('click', () => switchTab(tabDetailed, containerDetailed));
+tabEvents.addEventListener('click', () => switchTab(tabEvents, containerEvents));
+tabKamag.addEventListener('click', () => {
+    switchTab(tabKamag, containerKamag);
+    // Як тільки вкладка стала видимою (display: flex), перемальовуємо матрицю, 
+    // щоб графіки Chart.js могли правильно розрахувати свою ширину
+    if (Object.keys(totalOpsData).length > 0) {
+        renderKamagTable();
+    }
+});
 
-// --- Генерація ---
+// Генерация
+
+
+const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
+const generateModal = document.getElementById('generateModal');
+let generatedDatesList = [];
+
+// 1. Открытие модалки по кнопке "Порахуй"
 document.getElementById('generateDetailedBtn').addEventListener('click', () => {
     if (allSchedules.length === 0) return alert("Спочатку завантажте вихідні графіки!");
 
+    // Заполняем список автодворов из словаря
+    const yardSelect = document.getElementById('genYardSelect');
+    yardSelect.innerHTML = '<option value="ALL">Всі автодвори (повний розрахунок)</option>';
+    
+    const uniqueYards = Object.keys(yardDictionary).map(k => yardDictionary[k].yard).filter((v, i, a) => v && a.indexOf(v) === i).sort();
+    uniqueYards.forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = y;
+        yardSelect.appendChild(opt);
+    });
+
+    // Устанавливаем даты по умолчанию (Сегодня -> +6 дней)
+    const today = new Date();
+    document.getElementById('genDateStart').value = today.toISOString().split('T')[0];
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 6);
+    document.getElementById('genDateEnd').value = nextWeek.toISOString().split('T')[0];
+
+    generateModal.style.display = 'block';
+});
+
+// Закрытие модалки
+document.getElementById('closeGenerateModal').addEventListener('click', () => { generateModal.style.display = 'none'; });
+
+// 2. Кнопка расчета ВНУТРИ модалки
+document.getElementById('confirmGenerateBtn').addEventListener('click', () => {
+    const yardOpt = document.getElementById('genYardSelect').value;
+    const dStart = new Date(document.getElementById('genDateStart').value);
+    const dEnd = new Date(document.getElementById('genDateEnd').value);
+    const useDates = document.getElementById('genUseScheduleDates').checked;
+
+    if (isNaN(dStart) || isNaN(dEnd) || dStart > dEnd) return alert("Некоректний діапазон дат!");
+
+    generateModal.style.display = 'none';
+
+    // Формируем список дат для расчета
+    generatedDatesList = [];
+    let curr = new Date(dStart);
+    while (curr <= dEnd) {
+        generatedDatesList.push(new Date(curr));
+        curr.setDate(curr.getDate() + 1);
+    }
+
     const btn = document.getElementById('generateDetailedBtn');
     const originalText = btn.innerText;
-    btn.innerText = "⏳ Генерація...";
-    btn.disabled = true;
+    btn.innerText = "⏳ Генерація..."; btn.disabled = true;
 
     setTimeout(() => {
-        generateDetailedSchedules();
+        generateDetailedSchedules(yardOpt, useDates);
         calculateRampTimes();
         calculateUnloadingTimes();
         
-        filteredDetailedSchedules = [...detailedSchedules]; // Оновлюємо фільтр
+        filteredDetailedSchedules = [...detailedSchedules];
         initDetailedTable();
 
         generateYardEvents();
-        filteredYardEvents = [...yardEvents]; // Оновлюємо фільтр
+        filteredYardEvents = [...yardEvents];
         initEventsTable();
 
-        calculateKamagRequirements();
+        calculateFleetRequirements(); 
         
         tabDetailed.click();
         btn.innerText = originalText;
@@ -469,14 +676,17 @@ document.getElementById('generateDetailedBtn').addEventListener('click', () => {
     }, 50);
 });
 
-const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+function formatDateToDDMMYYYY(dateObj) {
+    return `${String(dateObj.getDate()).padStart(2, '0')}.${String(dateObj.getMonth() + 1).padStart(2, '0')}.${dateObj.getFullYear()}`;
+}
 
-function generateDetailedSchedules() {
+// 3. НОВАЯ ЛОГИКА ГЕНЕРАЦИИ ПО ДАТАМ
+function generateDetailedSchedules(targetYard, useDates) {
     detailedSchedules = [];
+    
     allSchedules.forEach(item => {
         if (!item.schema || item.schema === "ХЗ" || item.schema === "Схема не знайдена" || item.schema === "—") return;
 
-        // 1. СИСТЕМА ДИНАМІЧНИХ ТОЧОК
         const activeNodes = [];
         for (let i = 0; i < 12; i++) {
             if (item.pointNames[i] && item.pointNames[i].toString().trim() !== "") {
@@ -488,15 +698,31 @@ function generateDetailedSchedules() {
             }
         }
 
-        // 2. Очищаємо схему від можливих пробілів (щоб "12П 13П" стало "12П13П")
         const cleanSchema = item.schema.toString().replace(/\s+/g, '');
         const miniSchemas = [];
         for (let i = 0; i < cleanSchema.length; i += 3) {
             miniSchemas.push(cleanSchema.substring(i, i + 3));
         }
 
-        item.days.forEach((isActiveDay, dayIndex) => {
-            if (!isActiveDay) return; 
+        // --- ГЛАВНАЯ МАГИЯ: ПРОХОДИМ ПО ВЫБРАННЫМ ДАТАМ ---
+        generatedDatesList.forEach(targetDate => {
+            
+            // 1. Проверка по датам графика (столбцы B и C)
+            if (useDates) {
+                const tDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
+                const sDate = item.dateStart ? new Date(item.dateStart.getFullYear(), item.dateStart.getMonth(), item.dateStart.getDate()).getTime() : 0;
+                const eDate = item.dateEnd ? new Date(item.dateEnd.getFullYear(), item.dateEnd.getMonth(), item.dateEnd.getDate()).getTime() : Infinity;
+                
+                if (tDate < sDate) return; // График еще не начался
+                if (item.dateEnd && tDate > eDate) return; // График уже закончился
+            }
+
+            // 2. Проверка по дню недели
+            // В JS: 0=Вс, 1=Пн. У нас массив days: 0=Пн, 6=Вс.
+            const dayOfWeekIdx = (targetDate.getDay() + 6) % 7; 
+            if (!item.days[dayOfWeekIdx]) return; // В этот день недели не ездит
+
+            const dateString = formatDateToDDMMYYYY(targetDate);
 
             miniSchemas.forEach(mini => {
                 if (mini.length < 3) return; 
@@ -505,25 +731,26 @@ function generateDetailedSchedules() {
                 const endIndex = parseInt(mini[1], 10) - 1;
                 const containerType = mini.substring(2);
 
-                // 3. СУПЕР-ЗАХИСТ: Додано перевірку isNaN (чи є це взагалі числом)
                 if (isNaN(startIndex) || isNaN(endIndex) || startIndex < 0 || endIndex < 0 || startIndex >= activeNodes.length || endIndex >= activeNodes.length) return; 
 
                 const nodeA = activeNodes[startIndex];
                 const nodeB = activeNodes[endIndex];
 
-                // Фінальний запобіжник на випадок чорної магії JS
                 if (!nodeA || !nodeB) return;
 
                 const yardDataA = yardDictionary[nodeA.name];
                 const yardDataB = yardDictionary[nodeB.name];
+                
+                // Фильтр по автодвору
+                if (targetYard !== "ALL" && (!yardDataA || yardDataA.yard !== targetYard) && (!yardDataB || yardDataB.yard !== targetYard)) return;
 
-                let arrMins = getAbsoluteMinutes(dayNames[dayIndex], nodeB.timeArr);
+                let arrMins = getAbsoluteMinutes(dateString, nodeB.timeArr);
                 let finalArrivalB = formatAbsoluteMinutes(arrMins);
 
                 detailedSchedules.push({
                     originalRoute: item.route,
                     originalCode: item.code, 
-                    day: dayNames[dayIndex],
+                    day: dateString, // <--- ТЕПЕРЬ ТУТ "14.05.2026"
                     miniSchema: mini,
                     containerType: containerType,
                     yardA: yardDataA ? yardDataA.yard : "—", 
@@ -536,7 +763,7 @@ function generateDetailedSchedules() {
                     timeUnloadStart: "—", 
                     timeUnloadEnd: "—",   
                     vehicle: item.vehicleType,
-                    moveType: item.moveType // <--- ДОБАВЛЕНО СЮДА
+                    moveType: item.moveType 
                 });
             });
         });
@@ -621,87 +848,97 @@ function renderDetailedChunk() {
 const dayMap = { 'Пн': 0, 'Вт': 1, 'Ср': 2, 'Чт': 3, 'Пт': 4, 'Сб': 5, 'Нд': 6 };
 const reverseDayMap = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 
-function getAbsoluteMinutes(dayStr, timeStr) {
+function getAbsoluteMinutes(dateStr, timeStr) {
     if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes(':')) return Infinity; 
     
-    // Якщо формат уже містить день (напр. "Пн 12:40"), розбиваємо його
     const parts = timeStr.trim().split(' ');
-    const targetDay = parts.length === 2 ? parts[0] : dayStr;
-    const targetTime = parts.length === 2 ? parts[1] : timeStr;
+    const targetDateStr = parts.length === 2 ? parts[0] : dateStr;
+    const targetTimeStr = parts.length === 2 ? parts[1] : timeStr;
 
-    const [hh, mm] = targetTime.split(':').map(Number);
-    return dayMap[targetDay] * 1440 + hh * 60 + mm;
+    // Парсим дату "DD.MM.YYYY"
+    const [dd, mm, yyyy] = targetDateStr.split('.');
+    const [hh, min] = targetTimeStr.split(':').map(Number);
+    
+    // Создаем реальный объект даты и возвращаем минуты с 1970 года
+    const dateObj = new Date(yyyy, mm - 1, dd, hh, min);
+    return Math.floor(dateObj.getTime() / 60000); 
 }
 
 function formatAbsoluteMinutes(mins) {
-    if (mins === Infinity) return "—";
-    while (mins < 0) mins += 10080; 
-    mins = mins % 10080;
-    const d = Math.floor(mins / 1440);
-    const h = Math.floor((mins % 1440) / 60);
-    const m = mins % 60;
-    return `${reverseDayMap[d]} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    if (mins === Infinity || isNaN(mins)) return "—";
+    
+    const d = new Date(mins * 60000);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    
+    return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
 }
 
+// НОВАЯ ЛОГИКА "ПЕРШОЇ ПОСТАНОВКИ" (ПО ДНЯМ)
 function calculateRampTimes() {
     const interval = parseInt(document.getElementById('rampInterval').value, 10) || 10;
+    
+    // Группируем по узлу и дню!
     const groups = {};
     detailedSchedules.forEach(item => {
         if (item.timeDepartureA === "—") return;
-        const key = `${item.nodeA}_${item.nodeB}`;
+        const key = `${item.nodeA}_${item.day}`;
         if (!groups[key]) groups[key] = [];
         item.absDep = getAbsoluteMinutes(item.day, item.timeDepartureA);
-        item.timeDepartureA = formatAbsoluteMinutes(item.absDep);
+        item.timeDepartureA = formatAbsoluteMinutes(item.absDep); // Форматируем сразу
         groups[key].push(item);
     });
     
     for (const key in groups) {
         const group = groups[key];
-        // Сортуємо за часом виїзду, а якщо він однаковий — за назвою маршруту (щоб контейнери одного рейсу стояли поруч)
         group.sort((a, b) => a.absDep - b.absDep || a.originalRoute.localeCompare(b.originalRoute));
         if (group.length === 0) continue;
         
-        const lastOfGroup = group[group.length - 1];
-        let prevAbsDep = lastOfGroup.absDep - 10080; 
+        const yardConf = yardDictionary[group[0].nodeA];
+        const hasFixedFirst = yardConf && yardConf.firstPlacement && yardConf.firstPlacement !== "0:00";
+        const firstAbs = hasFixedFirst ? getAbsoluteMinutes(group[0].day, yardConf.firstPlacement) : 0;
+
+        let prevAbsDep = group[0].absDep - 10080; 
         
         for (let i = 0; i < group.length; i++) {
             let item1 = group[i];
             let item2 = (i + 1 < group.length) ? group[i + 1] : null;
             
-            // Перевіряємо, чи це два контейнери одного рейсу
             let isTwin = item2 && 
                          item1.originalRoute === item2.originalRoute && 
                          item1.day === item2.day && 
                          item1.absDep === item2.absDep;
 
-            let proposedPlacement = prevAbsDep + interval;
+            let proposedPlacement;
+            // Если это первый контейнер дня и есть фиксированное время
+            if (i === 0 && hasFixedFirst) {
+                proposedPlacement = firstAbs;
+            } else {
+                proposedPlacement = prevAbsDep + interval;
+            }
+
             let maxPlacementTime = item1.absDep - (23 * 60); 
             let finalPlacement = Math.max(proposedPlacement, maxPlacementTime);
             
             if (isTwin) {
                 let totalLoadTime = item1.absDep - finalPlacement;
-                
                 if (totalLoadTime <= 120) {
-                    // ПАРАЛЕЛЬНА ПОСТАНОВКА (<= 2 годин)
                     item1.timePlacementA = formatAbsoluteMinutes(finalPlacement);
                     item2.timePlacementA = formatAbsoluteMinutes(finalPlacement);
                     prevAbsDep = item1.absDep;
                 } else {
-                    // ПОСЛІДОВНА ПОСТАНОВКА (> 2 годин)
                     let tHalf = Math.floor((totalLoadTime - 10) / 2);
-                    
-                    // Перший контейнер (ставиться раніше, виїжджає з рампи раніше)
                     item1.timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                    item1.absDep = finalPlacement + tHalf; // Змінюємо час виїзду для 1-го
+                    item1.absDep = finalPlacement + tHalf; 
                     item1.timeDepartureA = formatAbsoluteMinutes(item1.absDep);
-                    
-                    // Другий контейнер (через 10 хв після виїзду 1-го)
                     item2.timePlacementA = formatAbsoluteMinutes(finalPlacement + tHalf + 10);
                     prevAbsDep = item2.absDep;
                 }
-                i++; // Пропускаємо другий контейнер у циклі, бо ми його вже обробили
+                i++; 
             } else {
-                // Одинарний контейнер
                 item1.timePlacementA = formatAbsoluteMinutes(finalPlacement);
                 prevAbsDep = item1.absDep;
             }
@@ -715,9 +952,7 @@ function calculateUnloadingTimes() {
         item.timeUnloadStart = "—";
         item.timeUnloadEnd = "—";
         
-        // ДОБАВЛЕНО: Якщо порожній, не рахуємо час вивантаження взагалі
         if (item.moveType && item.moveType.toLowerCase().includes("порожній")) return;
-
         if (item.vehicle !== "Шасі BDF" || item.timeArrivalB === "—") return;
         const yardDataB = yardDictionary[item.nodeB];
         if (!yardDataB) return; 
@@ -738,9 +973,8 @@ function calculateUnloadingTimes() {
     });
 }
 
-// --- Сортування ---
+// Сортировка
 let sortState = { key: null, asc: true };
-
 document.getElementById('tableContainerDetailed').addEventListener('click', function(e) {
     if (e.target.tagName === 'TH' && e.target.hasAttribute('data-sort')) {
         sortDetailedSchedules(e.target.getAttribute('data-sort'), e.target);
@@ -753,20 +987,16 @@ function sortDetailedSchedules(key, thElement) {
 
     const asc = sortState.asc;
     const getValue = (item, k) => {
-        // Універсальна логіка для всіх колонок з часом
         const timeCols = ['timePlacementA', 'timeDepartureA', 'timeArrivalB', 'timeUnloadStart', 'timeUnloadEnd'];
-        if (timeCols.includes(k)) {
-            return getAbsoluteMinutes(item.day, item[k]);
+        if (timeCols.includes(k)) return getAbsoluteMinutes(item.day, item[k]);
+        if (k === 'day') {
+            if (!item.day || !item.day.includes('.')) return Infinity;
+            const [dd, mm, yyyy] = item.day.split('.');
+            return new Date(yyyy, mm - 1, dd).getTime();
         }
-        
-        // Логіка для сортування за днем тижня
-        if (k === 'day') return dayMap[item.day] !== undefined ? dayMap[item.day] : Infinity;
-        
-        // Для всього іншого (текст)
         return item[k] !== undefined && item[k] !== null ? item[k] : "";
     };
 
-    // Сортуємо оригінальний масив
     detailedSchedules.sort((a, b) => {
         const valA = getValue(a, key);
         const valB = getValue(b, key);
@@ -778,60 +1008,78 @@ function sortDetailedSchedules(key, thElement) {
     Array.from(tr.children).forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
     thElement.classList.add(asc ? 'sort-asc' : 'sort-desc');
 
-    // Перезастосовуємо фільтри (вони оновлять екран автоматично)
     applyFiltersDetailed();
     document.getElementById('tableContainerDetailed').scrollTop = 0; 
 }
 
+// ГЕНЕРАЦИЯ СОБЫТИЙ С ПРОВЕРКОЙ НОВЫХ ФЛАГОВ (1, 2, 3, 4)
 function generateYardEvents() {
     yardEvents = [];
-    const addEvent = (yard, eventName, absMins, code) => {
+    
+    // 1. Сразу формируем список разрешенных дат (те, что выбрал логист в модалке)
+    const allowedDates = generatedDatesList.map(d => {
+        return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+    });
+
+    const addEvent = (yard, nodeName, eventIndex, eventName, absMins, code) => {
         if (absMins === Infinity || isNaN(absMins)) return;
-        const formatted = formatAbsoluteMinutes(absMins); 
-        const parts = formatted.split(' '); 
-        yardEvents.push({ yard: yard, code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins });
+        const yardConf = yardDictionary[nodeName];
+        let flag = 0;
+        
+        if (yardConf) {
+            if (eventIndex === 1) flag = yardConf.event1;
+            else if (eventIndex === 2) flag = yardConf.event2;
+            else if (eventIndex === 3) flag = yardConf.event3;
+            else if (eventIndex === 4) flag = yardConf.event4;
+        }
+        
+        if (flag === 1) {
+            const formatted = formatAbsoluteMinutes(absMins); 
+            const parts = formatted.split(' '); 
+            
+            // --- ГЛАВНЫЙ ФИЛЬТР ---
+            // Если дата события перевалила за полночь и не входит в выбранный нами диапазон - отбрасываем!
+            if (allowedDates.length > 0 && !allowedDates.includes(parts[0])) return;
+
+            yardEvents.push({ yard: yard, code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins });
+        }
     };
 
     detailedSchedules.forEach(item => {
-        // 👇 ДОБАВЛЕНА ПРОВЕРКА: Пропускаем всё, что не "Шасі BDF"
         if (item.vehicle !== "Шасі BDF") return;
 
-        // --- ПОДІЇ ДЛЯ ТОЧКИ А (ЗАВАНТАЖЕННЯ) ---
+        if (item.moveType && item.moveType.toLowerCase().includes("порожній")) {
+            if (item.yardB && item.yardB !== "—") {
+                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(item.day, item.timeArrivalB), item.originalCode);
+            }
+            return; 
+        }
+
         if (item.yardA && item.yardA !== "—") {
             if (item.timePlacementA && item.timePlacementA !== "—") {
                 const parts = item.timePlacementA.split(' ');
-                addEvent(item.yardA, "Постановка на завантаження", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
+                addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
             }
             if (item.timeDepartureA && item.timeDepartureA !== "—") {
-                addEvent(item.yardA, "Забір контейнера з-під завантаження", item.absDep - 15, item.originalCode);
+                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - 15, item.originalCode);
             }
         }
         
-        // --- ПОДІЇ ДЛЯ ТОЧКИ Б (ВИВАНТАЖЕННЯ) ---
         if (item.yardB && item.yardB !== "—") {
+            if (item.timeUnloadStart && item.timeUnloadStart !== "—") {
+                const parts = item.timeUnloadStart.split(' ');
+                addEvent(item.yardB, item.nodeB, 3, "3. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
+            }
             
-            // ПЕРЕВІРКА НА "ПОРОЖНІЙ"
-            if (item.moveType && item.moveType.toLowerCase().includes("порожній")) {
-                // Тільки одна операція рівно по приїзду
-                let arrMins = getAbsoluteMinutes(item.day, item.timeArrivalB);
-                addEvent(item.yardB, "Забір з-під вивантаження", arrMins, item.originalCode);
-            } else {
-                // СТАНДАРТНА ЛОГІКА
-                if (item.timeUnloadStart && item.timeUnloadStart !== "—") {
-                    const parts = item.timeUnloadStart.split(' ');
-                    addEvent(item.yardB, "Постановка на вивантаження", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
-                }
-                
-                if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
-                    const parts = item.timeUnloadEnd.split(' ');
-                    const endMins = getAbsoluteMinutes(parts[0], parts[1]);
-                    
-                    addEvent(item.yardB, "Забір з-під вивантаження", endMins, item.originalCode);
-                }
+            if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
+                const parts = item.timeUnloadEnd.split(' ');
+                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
             }
         }
     });
+    
     yardEvents.sort((a, b) => a.absMins - b.absMins);
+    assignKamagsToEvents();
 }
 
 function initEventsTable() {
@@ -853,6 +1101,7 @@ function initEventsTable() {
     container.innerHTML = html;
     eventsRenderedCount = 0;
     renderEventsChunk();
+    assignKamagsToEvents();
 }
 
 function renderEventsChunk() {
@@ -877,41 +1126,94 @@ function renderEventsChunk() {
     eventsRenderedCount = end;
 }
 
-// --- РОЗРАХУНОК КАМАГІВ ---
-let kamagData = {}; 
-let totalOpsData = {}; // Тепер тут лише загальна кількість операцій
+// ==========================================
+// НОВЫЙ БЛОК РАСЧЕТА ФЛОТА (KamagИ И МАНЫ)
+// ==========================================
+let totalOpsData = {}; 
+let fleetActiveState = {}; 
 
-function calculateKamagRequirements() {
-    kamagData = {};
+function calculateFleetRequirements() {
     totalOpsData = {}; 
+    fleetActiveState = {}; 
 
+    // Считаем все операции
     yardEvents.forEach(ev => {
-        // Ініціалізуємо структури для підрахунку загальної кількості операцій
         if (!totalOpsData[ev.yard]) totalOpsData[ev.yard] = {};
         if (!totalOpsData[ev.yard][ev.day]) totalOpsData[ev.yard][ev.day] = Array(24).fill(0);
-
         const hour = parseInt(ev.time.split(':')[0], 10);
-        if (!isNaN(hour)) {
-            totalOpsData[ev.yard][ev.day][hour]++;
-        }
+        if (!isNaN(hour)) totalOpsData[ev.yard][ev.day][hour]++;
     });
 
-    // Розраховуємо потребу в КАМАГах (1 машина на 12 операцій)
+    const yardNorms = {};
+    for(let node in yardDictionary) {
+        let y = yardDictionary[node].yard;
+        if(!yardNorms[y]) yardNorms[y] = { k: yardDictionary[node].normKamag || 12, m: yardDictionary[node].normMan || 6 };
+    }
+
+    // Распределяем и вычисляем дефицит
     for (let yard in totalOpsData) {
-        kamagData[yard] = {};
+        fleetActiveState[yard] = {};
+        const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+        const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
+        const normK = yardNorms[yard] ? yardNorms[yard].k : 12;
+        const normM = yardNorms[yard] ? yardNorms[yard].m : 6;
+
+        // Узнаем, сколько МАКСИМУМ дополнительных Kamagов понадобится на этой неделе
+        let maxExtraK = 0;
         for (let day in totalOpsData[yard]) {
-            kamagData[yard][day] = totalOpsData[yard][day].map(count => Math.ceil(count / 12));
+            for (let h = 0; h < 24; h++) {
+                let ops = totalOpsData[yard][day][h];
+                let cap = (availK * normK) + (availM * normM);
+                if (ops > cap) {
+                    let extra = Math.ceil((ops - cap) / normK);
+                    if (extra > maxExtraK) maxExtraK = extra;
+                }
+            }
+        }
+
+        const totalK = availK + maxExtraK; // Физические + Потребность
+
+        for (let day in totalOpsData[yard]) {
+            fleetActiveState[yard][day] = Array(24).fill(null).map(() => ({ 
+                kamag: Array(totalK).fill(false), 
+                man: Array(availM).fill(false) 
+            }));
+            
+            for (let h = 0; h < 24; h++) {
+                let neededOps = totalOpsData[yard][day][h];
+                
+                // 1. Насыщаем ФИЗИЧЕСКИЕ Kamagи
+                let assignedK = 0;
+                while (neededOps > 0 && assignedK < availK) {
+                    fleetActiveState[yard][day][h].kamag[assignedK] = true;
+                    assignedK++;
+                    neededOps -= normK;
+                }
+                
+                // 2. Насыщаем ФИЗИЧЕСКИЕ МАНы
+                let assignedM = 0;
+                while (neededOps > 0 && assignedM < availM) {
+                    fleetActiveState[yard][day][h].man[assignedM] = true;
+                    assignedM++;
+                    neededOps -= normM;
+                }
+
+                // 3. Если все еще не хватает - насыщаем ВИРТУАЛЬНЫЕ Kamagи (Потреба)
+                while (neededOps > 0 && assignedK < totalK) {
+                    fleetActiveState[yard][day][h].kamag[assignedK] = true;
+                    assignedK++;
+                    neededOps -= normK;
+                }
+            }
         }
     }
 
-    // Оновлюємо список автодворів у селекті
     const yardSelect = document.getElementById('kamagYardSelect');
     const currentVal = yardSelect.value;
     yardSelect.innerHTML = "";
     Object.keys(totalOpsData).sort().forEach(yard => {
         const option = document.createElement('option');
-        option.value = yard;
-        option.textContent = yard;
+        option.value = option.textContent = yard;
         yardSelect.appendChild(option);
     });
     if (currentVal && totalOpsData[currentVal]) yardSelect.value = currentVal;
@@ -923,25 +1225,42 @@ function renderKamagTable() {
     const yard = document.getElementById('kamagYardSelect').value;
     const wrapper = document.getElementById('kamagTableWrapper');
 
-    if (!yard || !kamagData[yard]) {
+    if (!yard || !totalOpsData[yard]) {
         wrapper.innerHTML = "<p style='padding:20px;'>Немає даних для цього автодвору.</p>";
         return;
     }
 
-    const daysOfWeek = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+    const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+    const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
+    
+    // Динамически определяем totalK из стейта
+    // Динамически определяем totalK из стейта (по первой доступной дате)
+    let totalK = availK;
+    const availableDates = Object.keys(fleetActiveState[yard] || {});
+    if (availableDates.length > 0) {
+        totalK = fleetActiveState[yard][availableDates[0]][0].kamag.length;
+    }
 
-    // Додано 4-й параметр includeCharts (за замовчуванням false)
+    const yardNorms = { k: 12, m: 6 };
+    for(let node in yardDictionary) {
+        if(yardDictionary[node].yard === yard) {
+            yardNorms.k = yardDictionary[node].normKamag || 12;
+            yardNorms.m = yardDictionary[node].normMan || 6;
+            break;
+        }
+    }
+
+    // Собираем все уникальные даты, которые есть в данных двора, и сортируем хронологически
+    const daysOfWeek = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
+        const [d1, m1, y1] = a.split('.');
+        const [d2, m2, y2] = b.split('.');
+        return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
+    });
+
     function generateMatrixHTML(title, rowHeaders, dataProvider, includeCharts = false) {
-        let html = `<h3 style="margin: 20px 0 10px 0; color: #334155; border-left: 4px solid #ffaa00; padding-left: 10px;">${title}</h3>`;
-        html += `<table><thead>`;
-        
-        html += `<tr><th style="min-width: 120px;"></th>`;
-        daysOfWeek.forEach(d => {
-            html += `<th colspan="25" style="text-align: center; font-weight: bold; background-color: #e9ecef; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d;">${d}</th>`;
-        });
-        html += `<th style="text-align: center; line-height: 1.2;">Всього</th></tr>`;
-
-        html += `<tr><th style="font-size: 10px;">Рядок / Година</th>`;
+        let html = `<h3 style="margin: 5px 0 5px 0; color: #334155; border-left: 4px solid #ffaa00; padding-left: 10px;">${title}</h3><table><thead><tr><th style="min-width: 120px;"></th>`;
+        daysOfWeek.forEach(d => html += `<th colspan="25" style="text-align: center; font-weight: bold; background-color: #e9ecef; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d;">${d}</th>`);
+        html += `<th style="text-align: center; line-height: 1.2;">Всього</th></tr><tr><th style="font-size: 10px;">Рядок / Година</th>`;
         daysOfWeek.forEach(d => {
             for (let i = 0; i < 24; i++) {
                 let borderStyle = i === 0 ? "border-left: 2px solid #6c757d;" : "";
@@ -961,14 +1280,31 @@ function renderKamagTable() {
                     let val = dataProvider(rowName, d, h);
                     let borderStyle = h === 0 ? "border-left: 2px solid #6c757d;" : "";
                     
-                    if (val > 0) {
-                        let cellClass = title.includes("КАМАГ") ? "kamag-cell kamag-active" : "kamag-cell";
-                        let cellStyle = !title.includes("КАМАГ") ? "background-color: #fff9c4; font-weight: bold;" : "";
-                        html += `<td class="${cellClass}" style="${borderStyle} ${cellStyle}">${val}</td>`;
-                        dailySum += val;
-                        totalRowSum += val;
+                    if (title.includes("Машини") || title.includes("Флот")) {
+                        const isKamag = rowName.startsWith("Kamag");
+                        const match = rowName.match(/\d+/);
+                        const idx = match ? parseInt(match[0]) - 1 : 0;
+                        
+                        let isActive = val === 1;
+                        let cellClass = "kamag-cell kamag-editable";
+                        
+                        // Логика раскраски (Синий = Флот, Оранжевый = Дефицит)
+                        if (isActive) {
+                            if (isKamag && idx >= availK) cellClass += " kamag-active-virtual";
+                            else cellClass += " kamag-active";
+                        }
+                        
+                        let dataType = isKamag ? "kamag" : "man";
+                        html += `<td class="${cellClass}" style="${borderStyle} cursor:pointer;" data-yard="${yard}" data-day="${d}" data-hour="${h}" data-type="${dataType}" data-index="${idx}">${isActive ? 1 : ''}</td>`;
+                        if (isActive) { dailySum++; totalRowSum++; }
                     } else {
-                        html += `<td class="kamag-cell" style="${borderStyle}"></td>`;
+                        let cellStyle = "background-color: #fff9c4; font-weight: bold;";
+                        if (val !== 0 && val !== "") {
+                            html += `<td class="kamag-cell" style="${borderStyle} ${cellStyle}">${val}</td>`;
+                            if (typeof val === 'number') { dailySum += val; totalRowSum += val; }
+                        } else {
+                            html += `<td class="kamag-cell" style="${borderStyle}"></td>`;
+                        }
                     }
                 }
                 html += `<td style="text-align: center; font-weight: bold; background-color: #f1f3f5; border-right: 2px solid #6c757d;">${dailySum > 0 ? dailySum : ''}</td>`;
@@ -976,143 +1312,217 @@ function renderKamagTable() {
             html += `<td style="text-align: center; font-weight: bold; background-color: #e9ecef;">${totalRowSum}</td></tr>`;
         });
 
-        // ЯКЩО ПОТРІБНІ ГРАФІКИ (для таблиці операцій)
         if (includeCharts) {
             html += `<tr><td style="font-weight: bold; font-size: 11px;">Графік</td>`;
             daysOfWeek.forEach((d, index) => {
-                // Кожна діаграма розтягується рівно на 24 колонки годин
-                html += `<td colspan="24" style="border-left: 2px solid #6c757d; vertical-align: bottom; padding: 5px; background: #fff;">
-                            <div style="height: 60px; width: 100%; position: relative;">
-                                <canvas id="chart_${index}"></canvas>
-                            </div>
-                         </td>
-                         <td style="border-right: 2px solid #6c757d; background-color: #dee2e6;"></td>`;
+                html += `<td colspan="24" style="border-left: 2px solid #6c757d; vertical-align: bottom; padding: 0; background: #fff;"><div style="height: 60px; width: 100%;"><canvas id="chart_${index}"></canvas></div></td><td style="border-right: 2px solid #6c757d; background-color: #dee2e6;"></td>`;
             });
             html += `<td style="background-color: #e9ecef;"></td></tr>`;
         }
-
         html += `</tbody></table>`;
         return html;
     }
 
-    // 1. Таблиця КАМАГів (машин)
-    let maxK = 0;
-    daysOfWeek.forEach(d => { if(kamagData[yard][d]) maxK = Math.max(maxK, ...kamagData[yard][d]); });
-    const kamagRows = Array.from({length: maxK}, (_, i) => `Камаг ${i+1}`);
-    const kamagHTML = generateMatrixHTML(`Розрахунок КАМАГів (машин)`, kamagRows, (row, day, hour) => {
-        const kNum = parseInt(row.split(' ')[1]);
-        return (kamagData[yard][day] && kamagData[yard][day][hour] >= kNum) ? 1 : 0;
+    const rowHeaders = [];
+    for(let i=1; i<=availK; i++) rowHeaders.push(`Kamag ${i}`);
+    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
+    for(let i=availK+1; i<=totalK; i++) rowHeaders.push(`Kamag ${i} (дод.)`); // Выводим дефицит
+    
+    let fleetHTML = generateMatrixHTML(`Задіяність флоту (Машини)`, rowHeaders, (row, day, hour) => {
+        if (!fleetActiveState[yard][day] || !fleetActiveState[yard][day][hour]) return 0;
+        const isKamag = row.startsWith("Kamag");
+        const match = row.match(/\d+/);
+        const idx = match ? parseInt(match[0]) - 1 : 0;
+        const state = fleetActiveState[yard][day][hour];
+        return (isKamag ? state.kamag[idx] : state.man[idx]) ? 1 : 0;
     });
 
-    // 2. Таблиця Операцій + ДІАГРАМИ (передаємо includeCharts = true)
-    const opsHTML = generateMatrixHTML(`Кількість операцій (всього)`, ["Всього операцій"], (row, day, hour) => {
-        return (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
+    const opsHTML = generateMatrixHTML(`Кількість операцій (всього)`, ["Всього операцій", "Непокриті операції"], (row, day, hour) => {
+        if (row === "Всього операцій") {
+            return (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
+        } else {
+            const totalOps = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
+            let cap = 0;
+            if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][hour]) {
+                cap += fleetActiveState[yard][day][hour].kamag.filter(Boolean).length * yardNorms.k;
+                cap += fleetActiveState[yard][day][hour].man.filter(Boolean).length * yardNorms.m;
+            }
+            const uncovered = Math.max(0, totalOps - cap);
+            return `<span id="uncovered_${day}_${hour}" class="${uncovered > 0 ? 'uncovered-alert' : ''}">${uncovered > 0 ? uncovered : ''}</span>`;
+        }
     }, true);
 
-    wrapper.innerHTML = kamagHTML + "<div style='height: 40px;'></div>" + opsHTML;
+    wrapper.innerHTML = fleetHTML + "<div style='height: 10px;'></div>" + opsHTML;
 
-    // 3. Ініціалізуємо 7 ОРЕМИХ ДІАГРАМ
-    if (window.myDayCharts) {
-        window.myDayCharts.forEach(c => c.destroy()); // Чистимо старі при перемиканні
-    }
+    if (window.myDayCharts) window.myDayCharts.forEach(c => c.destroy());
     window.myDayCharts = [];
 
     daysOfWeek.forEach((d, index) => {
         const ctx = document.getElementById(`chart_${index}`);
         if (!ctx) return;
+        const parentDiv = ctx.parentElement;
+        ctx.width = parentDiv.clientWidth; ctx.height = 60;
 
-        const chartLabels = [];
-        const opsData = [];
-        const kamagLineData = [];
-
+        const chartLabels = [], opsData = [], capacityData = [];
         for (let h = 0; h < 24; h++) {
             chartLabels.push(`${h}:00`);
-            
-            // Дані для операцій
-            const opsVal = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
-            opsData.push(opsVal);
-
-            // Дані для КАМАГів
-            const kamagVal = (kamagData[yard] && kamagData[yard][d]) ? kamagData[yard][d][h] : 0;
-            kamagLineData.push(kamagVal);
+            opsData.push((totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0);
+            let cap = 0;
+            if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
+                cap += fleetActiveState[yard][d][h].kamag.filter(Boolean).length * yardNorms.k;
+                cap += fleetActiveState[yard][d][h].man.filter(Boolean).length * yardNorms.m;
+            }
+            capacityData.push(cap);
         }
 
-        const newChart = new Chart(ctx, {
+        window.myDayCharts.push(new Chart(ctx, {
             type: 'bar',
-            data: {
-                labels: chartLabels,
-                datasets: [
-                    {
-                        type: 'line',
-                        label: 'КАМАГи',
-                        data: kamagLineData,
-                        borderColor: '#dc3545', // Червона лінія
-                        backgroundColor: '#dc3545',
-                        borderWidth: 2,
-                        tension: 0.3, // Легке заокруглення
-                        pointRadius: 2,
-                        pointHoverRadius: 4,
-                        yAxisID: 'y1' // Друга незалежна вісь
-                    },
-                    {
-                        type: 'bar',
-                        label: 'Операції',
-                        data: opsData,
-                        backgroundColor: 'rgba(255, 193, 7, 0.7)', // Трохи прозорий, щоб було видно лінію
-                        borderColor: '#ffaa00',
-                        borderWidth: 1,
-                        borderRadius: 2,
-                        yAxisID: 'y' // Основна вісь
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: {
-                    mode: 'index', // Показує тултип для обох графіків відразу
-                    intersect: false,
-                },
-                scales: {
-                    x: { display: false },
-                    y: { 
-                        type: 'linear', 
-                        display: false, 
-                        position: 'left', 
-                        beginAtZero: true 
-                    },
-                    y1: { 
-                        type: 'linear', 
-                        display: false, 
-                        position: 'right', 
-                        beginAtZero: true,
-                        grid: { drawOnChartArea: false } // Щоб сітки не перетиналися
-                    }
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            title: (items) => `${d} ${items[0].label}`,
-                            label: (item) => `${item.dataset.label}: ${item.raw}`
-                        }
-                    }
-                },
-                layout: { padding: 0 }
+            data: { labels: chartLabels, datasets: [
+                // ЗМІНЕНО: Прибрали yAxisID: 'y1', тепер лінія використовує ту саму вісь 'y', що й стовпчики
+                { type: 'line', label: 'Потужність', data: capacityData, borderColor: '#0d47a1', backgroundColor: '#0d47a1', borderWidth: 2, tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+                { type: 'bar', label: 'Операції', data: opsData, backgroundColor: 'rgba(255, 193, 7, 0.7)', borderColor: '#ffaa00', borderWidth: 1, borderRadius: 2, yAxisID: 'y' }
+            ]},
+            options: { 
+                animation: false, 
+                responsive: false, 
+                maintainAspectRatio: false, 
+                interaction: { mode: 'index', intersect: false }, 
+                scales: { 
+                    x: { display: false }, 
+                    // ЗМІНЕНО: Залишили тільки одну вісь Y, прибрали y1 взагалі
+                    y: { type: 'linear', display: false, beginAtZero: true } 
+                }, 
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { callbacks: { title: (items) => `${d} ${items[0].label}`, label: (item) => `${item.dataset.label}: ${item.raw}` } } 
+                }, 
+                layout: { padding: 0 } 
             }
-        });
-        window.myDayCharts.push(newChart);
+        }));
     });
 }
 
 document.getElementById('kamagYardSelect').addEventListener('change', renderKamagTable);
-document.getElementById('kamagDaySelect').addEventListener('change', renderKamagTable);
 
+// КЛИКИ ПО МАТРИЦЕ ФЛОТА
+document.getElementById('kamagTableWrapper').addEventListener('click', function(e) {
+    if (e.target.classList.contains('kamag-editable')) {
+        const cell = e.target;
+        const yard = cell.getAttribute('data-yard');
+        const day = cell.getAttribute('data-day');
+        const hour = parseInt(cell.getAttribute('data-hour'));
+        const type = cell.getAttribute('data-type'); 
+        const idx = parseInt(cell.getAttribute('data-index'));
+
+        const currentState = fleetActiveState[yard][day][hour][type][idx];
+        const newState = !currentState;
+        fleetActiveState[yard][day][hour][type][idx] = newState;
+        
+        const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+
+        if (newState) {
+            if (type === 'kamag' && idx >= availK) cell.classList.add('kamag-active-virtual');
+            else cell.classList.add('kamag-active');
+            cell.innerText = '1';
+        } else {
+            cell.classList.remove('kamag-active', 'kamag-active-virtual');
+            cell.innerText = '';
+        }
+
+        const yardNorms = { k: 12, m: 6 };
+        for(let node in yardDictionary) {
+            if(yardDictionary[node].yard === yard) {
+                yardNorms.k = yardDictionary[node].normKamag || 12;
+                yardNorms.m = yardDictionary[node].normMan || 6;
+                break;
+            }
+        }
+
+        const totalOps = totalOpsData[yard][day][hour] || 0;
+        let cap = fleetActiveState[yard][day][hour].kamag.filter(Boolean).length * yardNorms.k;
+        cap += fleetActiveState[yard][day][hour].man.filter(Boolean).length * yardNorms.m;
+        
+        const uncovered = Math.max(0, totalOps - cap);
+        const uncoveredCell = document.getElementById(`uncovered_${day}_${hour}`);
+        if (uncoveredCell) {
+            uncoveredCell.innerText = uncovered > 0 ? uncovered : '';
+            uncoveredCell.className = uncovered > 0 ? 'uncovered-alert' : '';
+        }
+
+        // Вычисляем индекс дня динамически на основе реальных дат
+        const daysOfYard = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
+            const [d1, m1, y1] = a.split('.');
+            const [d2, m2, y2] = b.split('.');
+            return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
+        });
+        const dayIndex = daysOfYard.indexOf(day);
+        if (window.myDayCharts && window.myDayCharts[dayIndex]) {
+            window.myDayCharts[dayIndex].data.datasets[0].data[hour] = cap;
+            window.myDayCharts[dayIndex].update();
+        }
+    }
+});
+
+function assignKamagsToEvents() {
+    yardEvents = yardEvents.filter(ev => ev.event !== "Чергування");
+    const activeKamagsLog = {}, hourTracker = {};
+
+    yardEvents.forEach(ev => {
+        ev.kamag = "—"; 
+        const hour = parseInt(ev.time.split(':')[0], 10);
+        if (isNaN(hour)) return;
+
+        const key = `${ev.yard}_${ev.day}_${hour}`;
+        if (!hourTracker[key]) hourTracker[key] = 0;
+        
+        const availK = fleetDictionary[ev.yard] ? fleetDictionary[ev.yard].kamag : 0;
+
+        if (fleetActiveState[ev.yard] && fleetActiveState[ev.yard][ev.day] && fleetActiveState[ev.yard][ev.day][hour]) {
+            const st = fleetActiveState[ev.yard][ev.day][hour];
+            const activeResources = [];
+            
+            st.kamag.forEach((isActive, idx) => { 
+                if(isActive) activeResources.push(idx < availK ? `Kamag ${idx+1}` : `Kamag ${idx+1} (дод.)`); 
+            });
+            st.man.forEach((isActive, idx) => { if(isActive) activeResources.push(`Маневровий ${idx+1}`); });
+
+            if (activeResources.length > 0) {
+                const assignedMachine = activeResources[hourTracker[key] % activeResources.length];
+                ev.kamag = assignedMachine;
+                activeKamagsLog[`${ev.yard}_${ev.day}_${hour}_${ev.kamag}`] = true;
+            } else ev.kamag = "Немає ТЗ!"; 
+        }
+        hourTracker[key]++;
+    });
+
+    for (let y in fleetActiveState) {
+        const availK = fleetDictionary[y] ? fleetDictionary[y].kamag : 0;
+        for (let d in fleetActiveState[y]) {
+            for (let h = 0; h < 24; h++) {
+                const st = fleetActiveState[y][d][h];
+                if (st) {
+                    st.kamag.forEach((isActive, kIndex) => {
+                        const name = kIndex < availK ? `Kamag ${kIndex + 1}` : `Kamag ${kIndex + 1} (дод.)`;
+                        if (isActive && !activeKamagsLog[`${y}_${d}_${h}_${name}`]) {
+                            yardEvents.push({ yard: y, code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
+                        }
+                    });
+                    st.man.forEach((isActive, mIndex) => {
+                        const name = `Маневровий ${mIndex + 1}`;
+                        if (isActive && !activeKamagsLog[`${y}_${d}_${h}_${name}`]) {
+                            yardEvents.push({ yard: y, code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
+                        }
+                    });
+                }
+            }
+        }
+    }
+    yardEvents.sort((a, b) => a.absMins - b.absMins);
+}
 // =========================================
-// ФІЛЬТРАЦІЯ ТА ЕКСПОРТ (НОВЕ)
+// ФІЛЬТРАЦІЯ ТА ЕКСПОРТ (ВОССТАНОВЛЕНО ПОЛНОСТЬЮ)
 // =========================================
 
-// Допоміжні функції для перетворення об'єктів у масиви рядків (для фільтра і Excel)
 function getRawValues(item) {
     const vals = [
         item.route, item.deadline,
@@ -1131,9 +1541,9 @@ function getRawValues(item) {
 
 function getDetailedValues(item) {
     return [
-        "", // Місце під індекс (заповниться при рендері/експорті)
+        "", // Місце під індекс
         item.originalRoute, 
-        item.originalCode, // Додано код
+        item.originalCode, 
         item.day, 
         item.miniSchema, 
         item.containerType,
@@ -1154,8 +1564,6 @@ function getEventsValues(ev) {
     return [ev.yard, ev.code, ev.event, ev.day, ev.time];
 }
 
-// Універсальний рушій фільтрації
-// Універсальний "Розумний" рушій фільтрації
 function filterDataArray(containerId, dataArray, valuesExtractor) {
     const inputs = document.querySelectorAll(`#${containerId} .filter-input`);
     const filters = [];
@@ -1172,80 +1580,42 @@ function filterDataArray(containerId, dataArray, valuesExtractor) {
     return dataArray.filter(item => {
         const rowVals = valuesExtractor(item);
         
-        // Кожна заповнена колонка повинна збігатися (логіка AND між стовпцями)
         return filters.every(f => {
             const cellStr = String(rowVals[f.col] || "").toLowerCase();
-            
-            // Розбиваємо введений текст по комі (логіка OR всередині стовпця)
-            // Наприклад: "київ, львів" -> ['київ', 'львів']
             const searchTerms = f.val.split(',').map(s => s.trim()).filter(Boolean);
-            
-            // Якщо хоча б один шматочок тексту є в комірці — рядок підходить!
             return searchTerms.some(term => cellStr.includes(term));
         });
     });
 }
 
-// Повертаємо слухач подій на 'input' з затримкою (debounce), щоб можна було друкувати
 let filterTimeout;
 document.addEventListener('input', function(e) {
     if (e.target.classList.contains('filter-input')) {
         clearTimeout(filterTimeout);
         filterTimeout = setTimeout(() => {
             const container = e.target.closest('.table-container');
-            if (container.id === 'tableContainerRaw') applyFiltersRaw();
-            else if (container.id === 'tableContainerDetailed') applyFiltersDetailed();
-            else if (container.id === 'tableContainerEvents') applyFiltersEvents();
-        }, 300); // 300мс затримки, щоб інтерфейс не зависав під час швидкого друку
-    }
-});
-// Слухач подій для списків (використовуємо 'change' замість 'input')
-document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('filter-input')) {
-        const container = e.target.closest('.table-container');
-        if (container.id === 'tableContainerRaw') applyFiltersRaw();
-        else if (container.id === 'tableContainerDetailed') applyFiltersDetailed();
-        else if (container.id === 'tableContainerEvents') applyFiltersEvents();
-    }
-});
-
-function applyFiltersRaw() {
-    filteredAllSchedules = filterDataArray('tableContainerRaw', allSchedules, getRawValues);
-    renderedCount = 0;
-    const tbody = document.getElementById('tableBody');
-    if(tbody) tbody.innerHTML = "";
-    renderChunk();
-}
-
-function applyFiltersDetailed() {
-    filteredDetailedSchedules = filterDataArray('tableContainerDetailed', detailedSchedules, getDetailedValues);
-    detailedRenderedCount = 0;
-    const tbody = document.getElementById('detailedTableBody');
-    if(tbody) tbody.innerHTML = "";
-    renderDetailedChunk();
-}
-
-function applyFiltersEvents() {
-    filteredYardEvents = filterDataArray('tableContainerEvents', yardEvents, getEventsValues);
-    eventsRenderedCount = 0;
-    const tbody = document.getElementById('eventsTableBody');
-    if(tbody) tbody.innerHTML = "";
-    renderEventsChunk();
-}
-
-document.addEventListener('input', function(e) {
-    if (e.target.classList.contains('filter-input')) {
-        clearTimeout(filterTimeout);
-        filterTimeout = setTimeout(() => {
-            const container = e.target.closest('.table-container');
-            if (container.id === 'tableContainerRaw') applyFiltersRaw();
-            else if (container.id === 'tableContainerDetailed') applyFiltersDetailed();
-            else if (container.id === 'tableContainerEvents') applyFiltersEvents();
-        }, 300); // 300мс затримки, щоб не гальмувати при швидкому наборі
+            if (container.id === 'tableContainerRaw') {
+                filteredAllSchedules = filterDataArray('tableContainerRaw', allSchedules, getRawValues);
+                renderedCount = 0;
+                document.getElementById('tableBody').innerHTML = "";
+                renderChunk();
+            } else if (container.id === 'tableContainerDetailed') {
+                filteredDetailedSchedules = filterDataArray('tableContainerDetailed', detailedSchedules, getDetailedValues);
+                detailedRenderedCount = 0;
+                document.getElementById('detailedTableBody').innerHTML = "";
+                renderDetailedChunk();
+            } else if (container.id === 'tableContainerEvents') {
+                filteredYardEvents = filterDataArray('tableContainerEvents', yardEvents, getEventsValues);
+                eventsRenderedCount = 0;
+                document.getElementById('eventsTableBody').innerHTML = "";
+                renderEventsChunk();
+            }
+        }, 300); 
     }
 });
 
-// Експорт в Excel
+// ВОССТАНОВЛЕННЫЙ И ОБНОВЛЕННЫЙ ЭКСПОРТ В EXCEL
+// ВОССТАНОВЛЕННЫЙ И ОБНОВЛЕННЫЙ ЭКСПОРТ В EXCEL
 document.getElementById('exportExcelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('exportExcelBtn');
     const originalText = btn.innerText;
@@ -1257,7 +1627,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         const sheet = workbook.addWorksheet('Звіт');
         
         if (tabRaw.classList.contains('active')) {
-            // --- ЭКСПОРТ ИСХОДНЫХ ГРАФИКОВ ---
             const headers = ["Маршрут", "Дедлайн", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд", "Початкова", "Приїзд", "Виїзд"];
             for(let i=1; i<=10; i++) headers.push(`П.Т. №${i}`, "Приїзд", "Виїзд");
             headers.push("Кінцева", "Приїзд", "Вивільнення", "Тип доставки", "Тип ТЗ", "Схема БДФ", "Формат", "Код", "Тип переміщення");
@@ -1266,7 +1635,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             filteredAllSchedules.forEach(item => sheet.addRow(getRawValues(item)));
 
         } else if (tabDetailed.classList.contains('active')) {
-            // --- ЭКСПОРТ ДЕТАЛИЗИРОВАННЫХ РЕЙСОВ ---
             const headers = ["№", "Маршрут", "Код", "День", "Схема", "Тип", "Автодвір А", "Постановка", "Точка А", "Виїзд", "Автодвір Б", "Точка Б", "Приїзд", "Постановка (вивант.)", "Кінець вивант.", "Тип ТЗ"];
             sheet.addRow(headers);
             filteredDetailedSchedules.forEach((item, index) => {
@@ -1276,24 +1644,30 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             });
 
         } else if (tabKamag.classList.contains('active')) {
-            // --- ЭКСПОРТ КАМАГОВ И ДИАГРАММ С ФОРМАТИРОВАНИЕМ ---
             const yard = document.getElementById('kamagYardSelect').value;
-            const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+            const days = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
+                const [d1, m1, y1] = a.split('.');
+                const [d2, m2, y2] = b.split('.');
+                return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
+            });
             
-            // 0. Налаштування ширини колонок
-            sheet.getColumn(1).width = 18; // Рядок / Година
+            sheet.getColumn(1).width = 18; 
             for (let i = 2; i <= 1 + 25 * 7; i++) {
-                sheet.getColumn(i).width = 3.5; // Години (робимо вузькими)
-                if ((i - 1) % 25 === 0) sheet.getColumn(i).width = 5; // Стовпці сум (трохи ширші)
+                sheet.getColumn(i).width = 3.5; 
+                if ((i - 1) % 25 === 0) sheet.getColumn(i).width = 5; 
             }
-            sheet.getColumn(2 + 25 * 7).width = 8; // Загальна сума "Разом"
+            sheet.getColumn(2 + 25 * 7).width = 8; 
 
-            // Словник стилів
             const alignCenter = { vertical: 'middle', horizontal: 'center' };
             const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9ECEF' } };
             const fillSum = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F3F5' } };
-            const fillActive = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } }; 
+            
+            // --- НОВЫЕ ЦВЕТА ---
+            const fillActive = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBDEFB' } }; // Синий цвет физического флота
+            const fillActiveVirtual = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } }; // Оранжевый для требуемого (доп.) флота
             const fillOps = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
+            const fillUncovered = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBEE' } }; // Красный фон для непокрытых операций
+            const fontUncovered = { bold: true, size: 9, color: { argb: 'FFD32F2F' } }; // Красный текст
 
             const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
             const borderMedium = { style: 'medium', color: { argb: 'FF6C757D' } };
@@ -1304,11 +1678,9 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 right: isRightEdge ? borderMedium : borderThin
             });
 
-            // 1. ЗАГОЛОВОК
-            sheet.addRow([`Звіт по КАМАГам: ${yard}`]).font = { bold: true, size: 14 };
+            sheet.addRow([`Звіт по Флоту: ${yard}`]).font = { bold: true, size: 14 };
             sheet.addRow([]);
 
-            // 2. ШАПКА ТАБЛИЦІ (Дні тижня)
             const rowDays = sheet.addRow(["День"]);
             rowDays.getCell(1).font = { bold: true };
             rowDays.getCell(1).alignment = alignCenter;
@@ -1316,7 +1688,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             days.forEach((d, index) => {
                 const startCol = 2 + index * 25;
                 const endCol = startCol + 24;
-                sheet.mergeCells(3, startCol, 3, endCol); // Рядок 3 - це дні
+                sheet.mergeCells(3, startCol, 3, endCol); 
                 
                 const cell = sheet.getCell(3, startCol);
                 cell.value = d;
@@ -1328,7 +1700,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             sheet.getCell(3, 2 + 25 * 7).value = "Всього";
             sheet.getCell(3, 2 + 25 * 7).font = { bold: true };
 
-            // 3. ШАПКА ТАБЛИЦІ (Години)
             const rowHours = sheet.addRow(["Рядок / Година"]);
             rowHours.getCell(1).font = { size: 10 };
             
@@ -1336,7 +1707,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             days.forEach((d, index) => {
                 for (let h = 0; h < 24; h++) {
                     const cell = rowHours.getCell(currentCol);
-                    cell.value = h; // Тільки число для економії місця
+                    cell.value = h; 
                     cell.alignment = alignCenter;
                     cell.font = { size: 9 };
                     cell.border = getBorders(h === 0, false);
@@ -1351,12 +1722,20 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 currentCol++;
             });
 
-            // 4. ДАНІ КАМАГІВ
-            let maxK = 0;
-            days.forEach(d => { if(kamagData[yard][d]) maxK = Math.max(maxK, ...kamagData[yard][d]); });
+            // --- ОБНОВЛЕННЫЙ ЭКСПОРТ KamagОВ (с учетом потребности) ---
+            const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+            const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
             
-            for (let k = 1; k <= maxK; k++) {
-                const row = sheet.addRow([`Камаг ${k}`]);
+            // Динамически получаем общее количество Kamagов (включая дополнительные)
+            let totalK = availK;
+            const availableDates = Object.keys(fleetActiveState[yard] || {});
+            if (availableDates.length > 0 && fleetActiveState[yard][availableDates[0]][0]) {
+                totalK = fleetActiveState[yard][availableDates[0]][0].kamag.length;
+            }
+
+            for (let k = 1; k <= totalK; k++) {
+                const rowLabel = k <= availK ? `Kamag ${k}` : `Kamag ${k} (дод.)`;
+                const row = sheet.addRow([rowLabel]);
                 row.getCell(1).font = { bold: true, size: 10 };
                 let weekTotal = 0;
                 let cCol = 2;
@@ -1364,7 +1743,46 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 days.forEach(d => {
                     let daySum = 0;
                     for (let h = 0; h < 24; h++) {
-                        let val = (kamagData[yard][d] && kamagData[yard][d][h] >= k) ? 1 : "";
+                        let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].kamag[k-1]) ? 1 : "";
+                        const cell = row.getCell(cCol);
+                        cell.value = val;
+                        cell.alignment = alignCenter;
+                        cell.border = getBorders(h === 0, false);
+                        
+                        if (val === 1) {
+                            // Красим физический флот в синий, а дополнительный (потребность) - в оранжевый
+                            cell.fill = k <= availK ? fillActive : fillActiveVirtual;
+                            daySum++; weekTotal++;
+                        }
+                        cCol++;
+                    }
+                    const dSumCell = row.getCell(cCol);
+                    dSumCell.value = daySum || "";
+                    dSumCell.alignment = alignCenter;
+                    dSumCell.font = { bold: true };
+                    dSumCell.fill = fillSum;
+                    dSumCell.border = getBorders(false, true);
+                    cCol++;
+                });
+                
+                const wSumCell = row.getCell(cCol);
+                wSumCell.value = weekTotal;
+                wSumCell.alignment = alignCenter;
+                wSumCell.font = { bold: true };
+                wSumCell.fill = fillHeader;
+            }
+
+            // ЭКСПОРТ МАНОВ
+            for (let m = 1; m <= availM; m++) {
+                const row = sheet.addRow([`Маневровий ${m}`]);
+                row.getCell(1).font = { bold: true, size: 10 };
+                let weekTotal = 0;
+                let cCol = 2;
+
+                days.forEach(d => {
+                    let daySum = 0;
+                    for (let h = 0; h < 24; h++) {
+                        let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].man[m-1]) ? 1 : "";
                         const cell = row.getCell(cCol);
                         cell.value = val;
                         cell.alignment = alignCenter;
@@ -1376,7 +1794,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                         }
                         cCol++;
                     }
-                    // Денна сума
                     const dSumCell = row.getCell(cCol);
                     dSumCell.value = daySum || "";
                     dSumCell.alignment = alignCenter;
@@ -1386,7 +1803,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                     cCol++;
                 });
                 
-                // Тижнева сума
                 const wSumCell = row.getCell(cCol);
                 wSumCell.value = weekTotal;
                 wSumCell.alignment = alignCenter;
@@ -1394,9 +1810,19 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 wSumCell.fill = fillHeader;
             }
 
-            sheet.addRow([]); // Пробіл
+            sheet.addRow([]);
 
-            // 5. ДАНІ ОПЕРАЦІЙ
+            // Готовим нормы для расчета "Непокрытых операций"
+            const yardNorms = { k: 12, m: 6 };
+            for(let node in yardDictionary) {
+                if(yardDictionary[node].yard === yard) {
+                    yardNorms.k = yardDictionary[node].normKamag || 12;
+                    yardNorms.m = yardDictionary[node].normMan || 6;
+                    break;
+                }
+            }
+
+            // --- ЭКСПОРТ ОПЕРАЦИЙ ---
             const opsRow = sheet.addRow(["Всього операцій"]);
             opsRow.getCell(1).font = { bold: true, size: 10 };
             
@@ -1413,13 +1839,12 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                     cell.font = { bold: true, size: 9 };
                     cell.border = getBorders(h === 0, false);
                     
-                    if (val > 0) cell.fill = fillOps; // Світло-жовтий фон
+                    if (val > 0) cell.fill = fillOps;
                     
                     daySum += val;
                     totalWeekOps += val;
                     oCol++;
                 }
-                // Денна сума
                 const dSumCell = opsRow.getCell(oCol);
                 dSumCell.value = daySum || "";
                 dSumCell.alignment = alignCenter;
@@ -1429,18 +1854,63 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 oCol++;
             });
             
-            // Тижнева сума
             const wOpsSumCell = opsRow.getCell(oCol);
             wOpsSumCell.value = totalWeekOps;
             wOpsSumCell.alignment = alignCenter;
             wOpsSumCell.font = { bold: true };
             wOpsSumCell.fill = fillHeader;
 
-            // 6. ВСТАВКА ДІАГРАМ (Горизонтально під кожним днем)
+            // --- ДОБАВЛЕНО: ЭКСПОРТ НЕПОКРЫТЫХ ОПЕРАЦИЙ (ДЕФИЦИТ) ---
+            const uncoveredRow = sheet.addRow(["Непокриті операції"]);
+            uncoveredRow.getCell(1).font = { bold: true, size: 10 };
+            
+            let totalWeekUncovered = 0;
+            let uCol = 2;
+            
+            days.forEach(d => {
+                let daySum = 0;
+                for (let h = 0; h < 24; h++) {
+                    let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
+                    let cap = 0;
+                    if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
+                        cap += fleetActiveState[yard][d][h].kamag.filter(Boolean).length * yardNorms.k;
+                        cap += fleetActiveState[yard][d][h].man.filter(Boolean).length * yardNorms.m;
+                    }
+                    let uncovered = Math.max(0, totalOps - cap);
+
+                    const cell = uncoveredRow.getCell(uCol);
+                    cell.value = uncovered || "";
+                    cell.alignment = alignCenter;
+                    cell.border = getBorders(h === 0, false);
+                    
+                    if (uncovered > 0) {
+                        cell.fill = fillUncovered;
+                        cell.font = fontUncovered;
+                    }
+                    
+                    daySum += uncovered;
+                    totalWeekUncovered += uncovered;
+                    uCol++;
+                }
+                const dSumCell = uncoveredRow.getCell(uCol);
+                dSumCell.value = daySum || "";
+                dSumCell.alignment = alignCenter;
+                dSumCell.font = { bold: true };
+                dSumCell.fill = fillSum;
+                dSumCell.border = getBorders(false, true);
+                uCol++;
+            });
+            
+            const wUncoveredSumCell = uncoveredRow.getCell(uCol);
+            wUncoveredSumCell.value = totalWeekUncovered;
+            wUncoveredSumCell.alignment = alignCenter;
+            wUncoveredSumCell.font = { bold: true };
+            wUncoveredSumCell.fill = fillHeader;
+
             sheet.addRow([]);
             sheet.addRow(["Графіки:"]).font = { bold: true };
             
-            const imgRow = sheet.rowCount; // Рядок, де будуть картинки
+            const imgRow = sheet.rowCount; 
 
             for (let i = 0; i < 7; i++) {
                 const canvas = document.getElementById(`chart_${i}`);
@@ -1451,21 +1921,16 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                         extension: 'png',
                     });
                     
-                    // tl: { col, row } вказує верхній лівий кут. 
-                    // Колонки в ExcelJS для зображень починаються з 0 (0 = A, 1 = B).
-                    // Наші дні починаються з колонки B (індекс 1), і кожен займає 25 колонок.
                     sheet.addImage(imageId, {
                         tl: { col: 1 + i * 25, row: imgRow },
-                        ext: { width: 620, height: 100 } // Ширина підігнана під 24 вузькі колонки
+                        ext: { width: 620, height: 100 } 
                     });
                 }
             }
             
-            // Робимо кілька порожніх рядків під графіками, щоб вони не перекривали можливий текст нижче
             for(let i=0; i<6; i++) sheet.addRow([]); 
         }
 
-        // Сохранение файла
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), `Kamagon_Export_${new Date().getTime()}.xlsx`);
 
@@ -1476,4 +1941,93 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         btn.innerText = originalText;
         btn.disabled = false;
     }
+});
+
+
+// СОХРАНЕНИЕ
+document.getElementById('saveGoogleBtn').addEventListener('click', async () => {
+    const yard = document.getElementById('kamagYardSelect').value;
+    if (!yard) return alert("Оберіть автодвір!");
+
+    const btn = document.getElementById('saveGoogleBtn');
+    btn.innerText = "⏳ Збереження...";
+
+    const aggregatedRows = [];
+    const days = Object.keys(totalOpsData[yard] || {});
+
+    days.forEach(day => {
+        for (let h = 0; h < 24; h++) {
+            const opsCount = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][h] : 0;
+            
+            let actK = 0, actM = 0;
+            if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][h]) {
+                actK = fleetActiveState[yard][day][h].kamag.filter(Boolean).length;
+                actM = fleetActiveState[yard][day][h].man.filter(Boolean).length;
+            }
+            
+            if (opsCount > 0 || actK > 0 || actM > 0) aggregatedRows.push([yard, day, h, `${actK}|${actM}`, opsCount]);
+        }
+    });
+
+    try {
+        await fetch(RESULTS_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'saveAggregated', yard: yard, rows: aggregatedRows })
+        });
+        btn.innerText = "✅ Збережено!";
+    } catch (e) {
+        btn.innerText = "❌ Помилка";
+    }
+    setTimeout(() => btn.innerText = "Зберегти (поточний)", 3000);
+});
+
+document.getElementById('saveAllGoogleBtn').addEventListener('click', async () => {
+    const yards = Object.keys(totalOpsData);
+    if (yards.length === 0) return alert("Немає розрахованих даних для збереження!");
+
+    const btn = document.getElementById('saveAllGoogleBtn');
+    btn.innerText = "⏳ Збереження...";
+    btn.disabled = true;
+
+    const aggregatedRows = [];
+    //const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
+
+    yards.forEach(yard => {
+        const days = Object.keys(totalOpsData[yard] || {});
+        days.forEach(day => {
+            for (let h = 0; h < 24; h++) {
+                const opsCount = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][h] : 0;
+                
+                let actK = 0, actM = 0;
+                if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][h]) {
+                    actK = fleetActiveState[yard][day][h].kamag.filter(Boolean).length;
+                    actM = fleetActiveState[yard][day][h].man.filter(Boolean).length;
+                }
+                
+                if (opsCount > 0 || actK > 0 || actM > 0) aggregatedRows.push([yard, day, h, `${actK}|${actM}`, opsCount]);
+            }
+        });
+    });
+
+    try {
+        await fetch(RESULTS_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'saveAllAggregated', yards: yards, rows: aggregatedRows })
+        });
+        btn.innerText = "✅ Всі збережено!";
+    } catch (e) {
+        console.error(e);
+        btn.innerText = "❌ Помилка";
+    }
+    setTimeout(() => {
+        btn.innerText = "Зберегти ВСІ";
+        btn.disabled = false;
+    }, 3000);
+});
+
+// Автоматична активація вкладки при завантаженні
+document.addEventListener('DOMContentLoaded', () => {
+    tabKamag.click();
 });
