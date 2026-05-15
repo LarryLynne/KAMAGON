@@ -20,41 +20,84 @@ body {
 
 /* --- ШАПКА И ЛОГОТИП --- */
 .top-branding {
-    background: linear-gradient(90deg, #1e293b 0%, #334155 100%); /* Глубокий сланцево-синий градиент */
-    padding: 12px 20px;
+    background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+    padding: 12px 30px;
     display: flex;
+    justify-content: center; /* Центрируем содержимое (логотип) */
     align-items: center;
-    justify-content: center;
+    position: relative; /* База для позиционирования ключика */
+    height: 54px; /* Фиксированная высота, чтобы ничего не прыгало */
+    box-sizing: border-box;
 }
 
 .logo {
     margin: 0;
-    font-family: 'Segoe UI Black', 'Arial Black', sans-serif;
-    font-size: 24px;
+    font-family: cursive, Arial, sans-serif;
+    font-size: 32px;
     font-weight: 900;
-    letter-spacing: 4px; /* Делаем буквы шире для стиля */
+    letter-spacing: 20px;
     color: #ffffff;
     text-transform: uppercase;
-    text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
-
-    /* ДОБАВЛЕНО: Запрет выделения текста */
     user-select: none;
-    -webkit-user-select: none; /* Для Safari/Chrome */
-    -moz-user-select: none; /* Для Firefox */
-    -ms-user-select: none; /* Для старых Edge/IE */
+    /* Запускаем бесконечную пульсирующую анимацию */
+    animation: glow 1s ease-in-out infinite alternate;
 }
 
 .logo span {
-    color: #ffaa00; /* Тот самый оранжевый цвет, который мы использовали для матриц КАМАГов */
+    /* Делаем буквы белыми, чтобы розовый неон ложился красиво */
+    color: #ffffff; 
 }
+
+@keyframes glow {
+    from {
+        text-shadow: 
+            0 0 3px #fff, 
+            0 0 6px #fff, 
+            0 0 9px #fffdcf,   /* Темный насыщенный синий */
+            0 0 12px #fffdcf, 
+            0 0 15px #fffdcf, 
+            0 0 18px #fffdcf, 
+            0 0 21px #fffdcf;
+    }
+    to {
+        text-shadow: 
+            0 0 6px #fff, 
+            0 0 9px #00aaff,   /* Яркий голубой/циан 00aaff */
+            0 0 12px #00aaff, 
+            0 0 15px #00aaff, 
+            0 0 18px #00aaff, 
+            0 0 21px #00aaff, 
+            0 0 24px #00aaff;
+    }
+}
+
+/* Новий клас для ключика та імені */
+.login-info {
+    position: absolute;
+    right: 30px; /* Отступ от правого края */
+    cursor: pointer;
+    font-size: 18px;
+    color: #80d8ff;
+    font-weight: 600;
+    transition: all 0.2s;
+    text-shadow: 0 0 8px rgba(128, 216, 255, 0.8), 0 0 15px rgba(128, 216, 255, 0.4);
+    display: flex;
+    align-items: center;
+}
+
+.login-info:hover {
+    transform: scale(1.05);
+    text-shadow: 0 0 12px rgba(128, 216, 255, 1), 0 0 20px rgba(128, 216, 255, 0.6);
+}
+
 
 .global-controls {
     padding: 8px 20px;
     background: #fff;
-    display: flex;
+    display: flex; /* Саме це повертає елементи в один рядок */
     align-items: center;
     gap: 15px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #dee2e6;
 }
 
 /* Внутренняя панель на вкладке графиков */
@@ -542,7 +585,13 @@ th.col-day .filter-input {
 }
 
 /* Специфічні кольори для кнопок */
-.btn-export { background-color: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; margin-left: auto; margin-right: 0; }
+.btn-export { 
+    background-color: #e8f5e9; 
+    color: #2e7d32; 
+    border-color: #c8e6c9; 
+    margin-left: auto !important; /* Примусово відштовхуємо вправо */
+    margin-right: 0 !important; 
+}
 .btn-export:hover { background-color: #c8e6c9; }
 
 .btn-load, .btn-save, .btn-save-all {
@@ -654,7 +703,7 @@ th.col-day .filter-input {
     width: 18px;
     height: 18px;
     cursor: pointer;
-    accent-color: #4caf50; /* Робить галочку зеленою у сучасних браузерах */
+    accent-color: #ffffff00; /* Робить галочку зеленою у сучасних браузерах */
 }
 
 /* Велика зелена кнопка підтвердження */
@@ -683,23 +732,71 @@ th.col-day .filter-input {
 }
 
 /* Панель керування автодвором на вкладці "Розрахунок" */
+/* =========================================
+   КАМАГ ПАНЕЛЬ КЕРУВАННЯ (НОВА СТРУКТУРА)
+   ========================================= */
 .kamag-controls-panel {
-    margin-bottom: 15px;
-    padding: 12px 15px;
+    margin: 8px 15px; /* Менші відступи зовні */
+    padding: 8px 15px; /* Менші відступи всередині */
     background: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 8px;
     display: flex;
-    align-items: center;
-    flex-wrap: wrap; /* Щоб не ламалося на вузьких екранах */
+    flex-direction: column;
+    gap: 6px; /* Зменшили зазор між рядками вдвічі */
 }
 
-.kamag-controls-panel label {
-    font-weight: bold;
-    margin-right: 20px;
+/* Спільний стиль для рядків */
+.controls-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.controls-group-left, .controls-group-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px; /* Трохи щільніше кнопки */
+}
+
+/* Група дат */
+.date-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    padding: 2px 8px; /* Сплюснули зверху і знизу */
+    border: 1px solid #ced4da;
+    border-radius: 4px; /* Менше заокруглення */
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #495057;
+    font-size: 11px; /* Менший текст */
+}
+
+.custom-date-input {
+    border: none;
+    outline: none;
+    font-family: inherit;
+    color: #212529;
+    background: transparent;
+    font-size: 11px;
+    height: 22px; /* Тонкі поля вводу дат */
+    cursor: pointer;
+}
+
+/* Компактний чек-бокс для фільтрів */
+.compact-checkbox {
+    margin: 0 !important;
+    padding: 4px 10px !important; /* Сплюснули */
+    background: #fff !important;
+    font-size: 11px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
 }
 
 /* =========================================
@@ -721,15 +818,4 @@ th.col-day .filter-input {
 /* Скрытие защищенных элементов */
 .auth-hidden {
     display: none !important;
-}
-
-/* Стиль для кнопки входа (ключика) в шапке */
-#loginBtn {
-    cursor: pointer;
-    font-size: 18px;
-    margin-left: 15px;
-    transition: transform 0.2s;
-}
-#loginBtn:hover {
-    transform: scale(1.2);
 }

@@ -8,11 +8,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="header-panel">
         <div class="top-branding">
-            <h1 class="logo">KAMAG<span>ON</span> <span id="loginBtn">🔑</span></h1>
+            <h1 class="logo">KAMAG<span>ON</span></h1>
+            <div id="loginBtn" class="login-info">Увійти</div>
         </div>
 
         <div class="global-controls">
@@ -61,24 +63,44 @@
         <div id="tableContainerEvents" class="table-container" style="display: none;"></div>
         <div id="tableContainerKamag" class="table-container" style="display: none; flex-direction: column;">
             <div class="kamag-controls-panel">
-                <label>Автодвір: 
-                    <select id="kamagYardSelect"></select>
-                </label>
+                <div class="controls-row">
+                    <div class="controls-group-left">
+                        <label class="yard-select-label">
+                            Автодвір: 
+                            <select id="kamagYardSelect"></select>
+                        </label>
+                        <button id="loadGoogleYardBtn" class="tab-btn btn-action btn-load">
+                            Завантажити з бази
+                        </button>
+                    </div>
+                    
+                    <div class="controls-group-right">
+                        <button id="saveGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
+                            Зберегти (поточний)
+                        </button>
+                        <button id="saveAllGoogleBtn" class="tab-btn btn-action btn-save-all auth-hidden">
+                            Зберегти ВСІ
+                        </button>
+                    </div>
+                </div>
 
-                <label class="checkbox-group" style="padding: 0 10px; border: none; background: none; margin-left: 20px; font-size: 12px;">
-                    <input type="checkbox" id="hideVirtualFleet">
-                    Тільки існуючий флот
-                </label>
+                <div class="panel-divider"></div>
 
-                <button id="loadGoogleYardBtn" class="tab-btn btn-action btn-load">
-                    Завантажити з бази
-                </button>
-                <button id="saveGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
-                    Зберегти (поточний)
-                </button>
-                <button id="saveAllGoogleBtn" class="tab-btn btn-action btn-save-all auth-hidden">
-                    Зберегти ВСІ
-                </button>
+                <div class="controls-row filters-row">
+                    <div class="controls-group-left"> 
+                        <div class="date-filter-group">
+                            <span class="filter-label">Період відображення:</span>
+                            <input type="date" id="kamagStartDate" class="custom-date-input">
+                            <span class="date-separator">—</span>
+                            <input type="date" id="kamagEndDate" class="custom-date-input">
+                        </div>
+
+                        <label class="checkbox-group compact-checkbox">
+                            <input type="checkbox" id="hideVirtualFleet">
+                            Тільки існуючий флот
+                        </label>
+                    </div>
+                </div>
             </div>
             <div id="kamagTableWrapper" style="overflow: auto;"></div>
         </div>
@@ -127,8 +149,9 @@
     <div id="authModal" class="modal">
         <div class="modal-content" style="max-width: 300px; text-align: center; margin-top: 20vh;">
             <h2 style="border-bottom:none; margin-bottom: 5px;">Авторизація</h2>
-            <p style="color: #666; margin-bottom: 15px;">Введіть пароль для доступу</p>
-            <input type="password" id="authPassInput" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 15px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+            <p style="color: #666; margin-bottom: 15px;">Введіть логін та пароль</p>
+            <input type="text" id="authLoginInput" placeholder="Логін" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+            <input type="password" id="authPassInput" placeholder="Пароль" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 15px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
             <button id="authConfirmBtn" class="btn-confirm">Увійти</button>
             <button id="authCancelBtn" style="margin-top: 15px; background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px;">Скасувати</button>
         </div>

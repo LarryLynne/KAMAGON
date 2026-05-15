@@ -1,29 +1,48 @@
-// --- АВТОРИЗАЦІЯ З ПРИХОВУВАННЯМ ---
-const APP_PASSWORD = "299792458"; 
+// --- ГЛОБАЛЬНЫЕ СЛОВАРИ ---
+let routeDictionary = {};
+let yardDictionary = {};
+let fleetDictionary = {}; 
+let usersDictionary = {}; // НОВЫЙ СЛОВАРЬ КОЛЬЗОВАТЕЛЕЙ
 
 function checkAuth() {
     return new Promise((resolve) => {
+        // Проверяем, авторизован ли уже пользователь
         if (sessionStorage.getItem('kamagonAuth') === 'true') {
             resolve(true);
             return;
         }
         
+        // Если справочники еще не загрузились, мы не можем проверить логин
+        if (Object.keys(usersDictionary).length === 0) {
+            alert("Дочекайтеся завантаження даних з хмари!");
+            resolve(false);
+            return;
+        }
+        
         const modal = document.getElementById('authModal');
-        const input = document.getElementById('authPassInput');
+        const loginInput = document.getElementById('authLoginInput');
+        const passInput = document.getElementById('authPassInput');
+        
         modal.style.display = 'block';
-        input.value = '';
-        input.focus();
+        loginInput.value = '';
+        passInput.value = '';
+        loginInput.focus();
 
         document.getElementById('authConfirmBtn').onclick = () => {
-            if (input.value === APP_PASSWORD) {
+            const login = loginInput.value.trim();
+            const pass = passInput.value.trim();
+
+            // Проверяем наличие логина в словаре и совпадение пароля
+            if (usersDictionary[login] && String(usersDictionary[login]) === pass) {
                 sessionStorage.setItem('kamagonAuth', 'true');
+                sessionStorage.setItem('kamagonAuthUser', login); // Сохраняем имя
                 modal.style.display = 'none';
                 updateAuthVisibility(); // Показываем всё
-                //document.getElementById('tabRaw').click();
                 resolve(true);
             } else {
-                alert("Невірний пароль!");
-                input.value = '';
+                alert("Невірний логін або пароль!");
+                passInput.value = '';
+                passInput.focus();
             }
         };
 
@@ -36,6 +55,7 @@ function checkAuth() {
 
 function updateAuthVisibility() {
     const isAuth = sessionStorage.getItem('kamagonAuth') === 'true';
+    const activeUser = sessionStorage.getItem('kamagonAuthUser');
     const loginBtn = document.getElementById('loginBtn');
     
     // Скрываем или показываем все защищенные элементы
@@ -45,11 +65,24 @@ function updateAuthVisibility() {
         }
     });
 
-    // Если авторизован — прячем ключик, он больше не нужен
-    if (isAuth && loginBtn) loginBtn.style.display = 'none';
+    // Вместо ключика показываем имя пользователя и добавляем функцию выхода
+    if (isAuth && loginBtn) {
+        loginBtn.innerHTML = `${activeUser}`; // Прибрали інлайн-стилі, працює CSS
+        loginBtn.title = "Вийти з акаунту";
+        
+        // Меняем действие кнопки на логаут
+        loginBtn.removeEventListener('click', checkAuth);
+        loginBtn.onclick = () => {
+            if (confirm("Вийти з акаунту?")) {
+                sessionStorage.removeItem('kamagonAuth');
+                sessionStorage.removeItem('kamagonAuthUser');
+                location.reload(); // Перезагружаем страницу для очистки интерфейса
+            }
+        };
+    }
 }
 
-// Привязываем вызов модалки к ключику
+// Привязываем вызов модалки к ключику (для неавторизованных)
 document.getElementById('loginBtn').addEventListener('click', checkAuth);
 
 // Проверяем статус при загрузке
@@ -81,11 +114,6 @@ function parseExcelDate(val) {
     return isNaN(d.getTime()) ? null : d;
 }
 
-// Глобальные словари
-let routeDictionary = {};
-let yardDictionary = {};
-let fleetDictionary = {}; // НОВЫЙ СЛОВАРЬ ФЛОТА
-
 const fileInput = document.getElementById('fileInput');
 const DICT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT4cGlFO8YcDzdeLaqSpThqgYbTbmhDoT8LSaB4FDNsLy0cGgsCa_V-zMINs3WhpcIEA/exec';
 const RESULTS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvbyu5rzhhFiezY6_rNN9-51XZ2h0UBFx0RDMxnGif_XRz_LtU7gWOJ28_RDT4STD3vQ/exec';
@@ -103,7 +131,8 @@ async function loadRouteSchemas() {
         const data = await response.json();
         routeDictionary = data.routes;
         yardDictionary = data.yards;
-        fleetDictionary = data.fleet || {}; // Грузим флот
+        fleetDictionary = data.fleet || {}; 
+        usersDictionary = data.users || {}; // <--- ДОДАТИ ЦЕЙ РЯДОК
         console.log("Довідники завантажені");
         
         await loadSavedYardsList();
@@ -1251,10 +1280,23 @@ function renderKamagTable() {
     }
 
     // Собираем все уникальные даты, которые есть в данных двора, и сортируем хронологически
+    const startStr = document.getElementById('kamagStartDate').value;
+    const endStr = document.getElementById('kamagEndDate').value;
+    const startDate = startStr ? new Date(startStr).setHours(0,0,0,0) : null;
+    const endDate = endStr ? new Date(endStr).setHours(23,59,59,999) : null;
+
+    // Збираємо, сортуємо та ФІЛЬТРУЄМО дати
     const daysOfWeek = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
         const [d1, m1, y1] = a.split('.');
         const [d2, m2, y2] = b.split('.');
         return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
+    }).filter(d => {
+        const [dd, mm, yyyy] = d.split('.');
+        const currentD = new Date(yyyy, mm-1, dd).getTime();
+        
+        if (startDate && currentD < startDate) return false;
+        if (endDate && currentD > endDate) return false;
+        return true;
     });
 
     function generateMatrixHTML(title, rowHeaders, dataProvider, includeCharts = false) {
@@ -1511,7 +1553,8 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
         });
         const dayIndex = daysOfYard.indexOf(day);
         if (window.myDayCharts && window.myDayCharts[dayIndex]) {
-            window.myDayCharts[dayIndex].data.datasets[0].data[hour] = cap;
+            // Тепер графік бере правильну змінну (capTotal), яку ми розрахували вище
+            window.myDayCharts[dayIndex].data.datasets[0].data[hour] = capTotal; 
             window.myDayCharts[dayIndex].update();
         }
     }
@@ -1699,10 +1742,21 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
 
         } else if (tabKamag.classList.contains('active')) {
             const yard = document.getElementById('kamagYardSelect').value;
+            const startStr = document.getElementById('kamagStartDate').value;
+            const endStr = document.getElementById('kamagEndDate').value;
+            const startDate = startStr ? new Date(startStr).setHours(0,0,0,0) : null;
+            const endDate = endStr ? new Date(endStr).setHours(23,59,59,999) : null;
+
             const days = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
                 const [d1, m1, y1] = a.split('.');
                 const [d2, m2, y2] = b.split('.');
                 return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
+            }).filter(d => {
+                const [dd, mm, yyyy] = d.split('.');
+                const currentD = new Date(yyyy, mm-1, dd).getTime();
+                if (startDate && currentD < startDate) return false;
+                if (endDate && currentD > endDate) return false;
+                return true;
             });
             
             sheet.getColumn(1).width = 18; 
@@ -2121,3 +2175,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.getElementById('hideVirtualFleet').addEventListener('change', renderKamagTable);
+document.getElementById('kamagStartDate').addEventListener('change', renderKamagTable);
+document.getElementById('kamagEndDate').addEventListener('change', renderKamagTable);
