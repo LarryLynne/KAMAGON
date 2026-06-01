@@ -2,7 +2,10 @@
 let routeDictionary = {};
 let yardDictionary = {};
 let fleetDictionary = {}; 
-let usersDictionary = {}; // НОВЫЙ СЛОВАРЬ КОЛЬЗОВАТЕЛЕЙ
+let usersDictionary = {}; // НОВЫЙ СЛОВАРЬ ПОЛЬЗОВАТЕЛЕЙ
+let totalOpsData = {}; 
+let fleetActiveState = {}; 
+let systemFleetState = {}; // Базовое состояние автоматического расчета системы
 
 function checkAuth() {
     return new Promise((resolve) => {
@@ -67,7 +70,7 @@ function updateAuthVisibility() {
 
     // Вместо ключика показываем имя пользователя и добавляем функцию выхода
     if (isAuth && loginBtn) {
-        loginBtn.innerHTML = `${activeUser}`; // Прибрали інлайн-стилі, працює CSS
+        loginBtn.innerHTML = `${activeUser}`; 
         loginBtn.title = "Вийти з акаунту";
         
         // Меняем действие кнопки на логаут
@@ -90,7 +93,7 @@ document.addEventListener('DOMContentLoaded', updateAuthVisibility);
 
 // Константа с индексами (числа со скрина МИНУС 1)
 const colIdx = {
-    dateStart: 1, dateEnd: 2, // <--- НОВЫЕ СТОЛБЦЫ B и C
+    dateStart: 1, dateEnd: 2, 
     route: 4, deadline: 7,
     days: [9, 10, 11, 12, 13, 14, 15],
     points: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
@@ -114,6 +117,35 @@ function parseExcelDate(val) {
     return isNaN(d.getTime()) ? null : d;
 }
 
+// Хелпер для быстрого получения дня недели из строки формата DD.MM.YYYY
+function getDayOfWeekFromDotStr(dateStr) {
+    if (!dateStr || !dateStr.includes('.')) return "";
+    const [dd, mm, yyyy] = dateStr.split('.');
+    const d = new Date(yyyy, mm - 1, dd);
+    const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    return isNaN(d.getTime()) ? "" : dayNamesShort[d.getDay()];
+}
+
+// Функция получения текущего отфильтрованного списка дат на экране расчета
+function getFilteredDays(yard) {
+    const startStr = document.getElementById('kamagStartDate').value;
+    const endStr = document.getElementById('kamagEndDate').value;
+    const startDate = startStr ? new Date(startStr).setHours(0,0,0,0) : null;
+    const endDate = endStr ? new Date(endStr).setHours(23,59,59,999) : null;
+
+    return Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
+        const [d1, m1, y1] = a.split('.');
+        const [d2, m2, y2] = b.split('.');
+        return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
+    }).filter(d => {
+        const [dd, mm, yyyy] = d.split('.');
+        const currentD = new Date(yyyy, mm-1, dd).getTime();
+        if (startDate && currentD < startDate) return false;
+        if (endDate && currentD > endDate) return false;
+        return true;
+    });
+}
+
 const fileInput = document.getElementById('fileInput');
 const DICT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxT4cGlFO8YcDzdeLaqSpThqgYbTbmhDoT8LSaB4FDNsLy0cGgsCa_V-zMINs3WhpcIEA/exec';
 const RESULTS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvbyu5rzhhFiezY6_rNN9-51XZ2h0UBFx0RDMxnGif_XRz_LtU7gWOJ28_RDT4STD3vQ/exec';
@@ -132,7 +164,7 @@ async function loadRouteSchemas() {
         routeDictionary = data.routes;
         yardDictionary = data.yards;
         fleetDictionary = data.fleet || {}; 
-        usersDictionary = data.users || {}; // <--- ДОДАТИ ЦЕЙ РЯДОК
+        usersDictionary = data.users || {}; 
         console.log("Довідники завантажені");
         
         await loadSavedYardsList();
@@ -170,7 +202,7 @@ async function loadSavedYardsList() {
     }
 }
 
-// Загрузка данных двора (Адаптировано под флот Kamag+МАН)
+// Загрузка данных двора
 document.getElementById('loadGoogleYardBtn').addEventListener('click', async () => {
     const yard = document.getElementById('kamagYardSelect').value;
     const btn = document.getElementById('loadGoogleYardBtn');
@@ -181,13 +213,15 @@ document.getElementById('loadGoogleYardBtn').addEventListener('click', async () 
         const data = await response.json();
 
         if (data.savedRows && data.savedRows.length > 0) {
+            // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Очищаем сирые события, переключая систему в режим БД
+            yardEvents = []; 
+            
             fleetActiveState[yard] = {};
             totalOpsData[yard] = {};
 
             const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
             const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
 
-            // 1. Знаходимо максимальну потребу з урахуванням розбитого формату
             let maxLoadedK = availK;
             let maxLoadedM = availM;
             data.savedRows.forEach(row => {
@@ -202,7 +236,6 @@ document.getElementById('loadGoogleYardBtn').addEventListener('click', async () 
                 maxLoadedM = Math.max(maxLoadedM, mLen);
             });
 
-            // 2. Відновлюємо стан
             data.savedRows.forEach(row => {
                 let [y, day, hour, fleetCountStr, ops] = row;
                 
@@ -222,14 +255,13 @@ document.getElementById('loadGoogleYardBtn').addEventListener('click', async () 
 
                 totalOpsData[yard][dayStr][hour] = parseInt(ops, 10) || 0;
                 
-                // Розумний парсинг
                 let countStr = String(fleetCountStr);
                 let separator = countStr.includes('|') ? '|' : (countStr.includes('.') ? '.' : ',');
                 const counts = countStr.split(separator);
                 
                 const parseStateArr = (str, fallbackCount) => {
-                    if (str && str.includes(',')) return str.split(',').map(Number); // Новий формат
-                    const c = parseInt(str, 10) || 0; // Старий формат
+                    if (str && str.includes(',')) return str.split(',').map(Number); 
+                    const c = parseInt(str, 10) || 0; 
                     return Array(Math.max(c, fallbackCount)).fill(0).map((_, i) => i < c ? 1 : 0);
                 };
 
@@ -248,6 +280,14 @@ document.getElementById('loadGoogleYardBtn').addEventListener('click', async () 
                 }
             });
 
+            systemFleetState[yard] = {};
+            for (let day in fleetActiveState[yard]) {
+                systemFleetState[yard][day] = fleetActiveState[yard][day].map(hourObj => ({
+                    kamag: [...hourObj.kamag],
+                    man: [...hourObj.man]
+                }));
+            }
+
             renderKamagTable();
             document.getElementById('fileStatus').innerText = `Дані ${yard} завантажені!`;
         } else {
@@ -264,8 +304,8 @@ window.addEventListener('DOMContentLoaded', loadRouteSchemas);
 
 class Schedule {
     constructor(row) {
-        this.dateStart = parseExcelDate(row[colIdx.dateStart]); // <--- Читаем старт
-        this.dateEnd = parseExcelDate(row[colIdx.dateEnd]);     // <--- Читаем финиш
+        this.dateStart = parseExcelDate(row[colIdx.dateStart]); 
+        this.dateEnd = parseExcelDate(row[colIdx.dateEnd]);     
         this.route = row[colIdx.route] || "";
         this.deadline = row[colIdx.deadline] || "";
         this.days = colIdx.days.map(i => row[i] === 1 || row[i] === "1");
@@ -629,6 +669,16 @@ function switchTab(activeTabBtn, activeContainer) {
     
     activeTabBtn.classList.add('active');
     activeContainer.style.display = activeContainer === containerKamag ? 'flex' : 'block';
+
+    // Управляем видимостью через CSS-класс вместо инлайн-стилей
+    const exportModeSelect = document.getElementById('exportModeSelect');
+    if (exportModeSelect) {
+        if (activeTabBtn === tabKamag) {
+            exportModeSelect.classList.remove('hidden');
+        } else {
+            exportModeSelect.classList.add('hidden');
+        }
+    }
 }
 
 tabRaw.addEventListener('click', () => switchTab(tabRaw, containerRaw));
@@ -636,26 +686,19 @@ tabDetailed.addEventListener('click', () => switchTab(tabDetailed, containerDeta
 tabEvents.addEventListener('click', () => switchTab(tabEvents, containerEvents));
 tabKamag.addEventListener('click', () => {
     switchTab(tabKamag, containerKamag);
-    // Як тільки вкладка стала видимою (display: flex), перемальовуємо матрицю, 
-    // щоб графіки Chart.js могли правильно розрахувати свою ширину
     if (Object.keys(totalOpsData).length > 0) {
         renderKamagTable();
     }
 });
 
 // Генерация
-
-
-const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
-
 const generateModal = document.getElementById('generateModal');
 let generatedDatesList = [];
 
-// 1. Открытие модалки по кнопке "Порахуй"
+// Открытие модалки по кнопке "Порахуй"
 document.getElementById('generateDetailedBtn').addEventListener('click', () => {
     if (allSchedules.length === 0) return alert("Спочатку завантажте вихідні графіки!");
 
-    // Заполняем список автодворов из словаря
     const yardSelect = document.getElementById('genYardSelect');
     yardSelect.innerHTML = '<option value="ALL">Всі автодвори (повний розрахунок)</option>';
     
@@ -666,7 +709,6 @@ document.getElementById('generateDetailedBtn').addEventListener('click', () => {
         yardSelect.appendChild(opt);
     });
 
-    // Устанавливаем даты по умолчанию (Сегодня -> +6 дней)
     const today = new Date();
     document.getElementById('genDateStart').value = today.toISOString().split('T')[0];
     const nextWeek = new Date(today);
@@ -676,10 +718,9 @@ document.getElementById('generateDetailedBtn').addEventListener('click', () => {
     generateModal.style.display = 'block';
 });
 
-// Закрытие модалки
 document.getElementById('closeGenerateModal').addEventListener('click', () => { generateModal.style.display = 'none'; });
 
-// 2. Кнопка расчета ВНУТРИ модалки
+// Кнопка расчета ВНУТРИ модалки
 document.getElementById('confirmGenerateBtn').addEventListener('click', () => {
     const yardOpt = document.getElementById('genYardSelect').value;
     const dStart = new Date(document.getElementById('genDateStart').value);
@@ -690,7 +731,6 @@ document.getElementById('confirmGenerateBtn').addEventListener('click', () => {
 
     generateModal.style.display = 'none';
 
-    // Формируем список дат для расчета
     generatedDatesList = [];
     let curr = new Date(dStart);
     while (curr <= dEnd) {
@@ -726,7 +766,6 @@ function formatDateToDDMMYYYY(dateObj) {
     return `${String(dateObj.getDate()).padStart(2, '0')}.${String(dateObj.getMonth() + 1).padStart(2, '0')}.${dateObj.getFullYear()}`;
 }
 
-// 3. НОВАЯ ЛОГИКА ГЕНЕРАЦИИ ПО ДАТАМ
 function generateDetailedSchedules(targetYard, useDates) {
     detailedSchedules = [];
     
@@ -750,23 +789,18 @@ function generateDetailedSchedules(targetYard, useDates) {
             miniSchemas.push(cleanSchema.substring(i, i + 3));
         }
 
-        // --- ГЛАВНАЯ МАГИЯ: ПРОХОДИМ ПО ВЫБРАННЫМ ДАТАМ ---
         generatedDatesList.forEach(targetDate => {
-            
-            // 1. Проверка по датам графика (столбцы B и C)
             if (useDates) {
                 const tDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
                 const sDate = item.dateStart ? new Date(item.dateStart.getFullYear(), item.dateStart.getMonth(), item.dateStart.getDate()).getTime() : 0;
                 const eDate = item.dateEnd ? new Date(item.dateEnd.getFullYear(), item.dateEnd.getMonth(), item.dateEnd.getDate()).getTime() : Infinity;
                 
-                if (tDate < sDate) return; // График еще не начался
-                if (item.dateEnd && tDate > eDate) return; // График уже закончился
+                if (tDate < sDate) return; 
+                if (item.dateEnd && tDate > eDate) return; 
             }
 
-            // 2. Проверка по дню недели
-            // В JS: 0=Вс, 1=Пн. У нас массив days: 0=Пн, 6=Вс.
             const dayOfWeekIdx = (targetDate.getDay() + 6) % 7; 
-            if (!item.days[dayOfWeekIdx]) return; // В этот день недели не ездит
+            if (!item.days[dayOfWeekIdx]) return; 
 
             const dateString = formatDateToDDMMYYYY(targetDate);
 
@@ -787,7 +821,6 @@ function generateDetailedSchedules(targetYard, useDates) {
                 const yardDataA = yardDictionary[nodeA.name];
                 const yardDataB = yardDictionary[nodeB.name];
                 
-                // Фильтр по автодвору
                 if (targetYard !== "ALL" && (!yardDataA || yardDataA.yard !== targetYard) && (!yardDataB || yardDataB.yard !== targetYard)) return;
 
                 let arrMins = getAbsoluteMinutes(dateString, nodeB.timeArr);
@@ -796,7 +829,7 @@ function generateDetailedSchedules(targetYard, useDates) {
                 detailedSchedules.push({
                     originalRoute: item.route,
                     originalCode: item.code, 
-                    day: dateString, // <--- ТЕПЕРЬ ТУТ "14.05.2026"
+                    day: dateString, 
                     miniSchema: mini,
                     containerType: containerType,
                     yardA: yardDataA ? yardDataA.yard : "—", 
@@ -825,10 +858,10 @@ function initDetailedTable() {
 
     let c = 0;
     let html = `<table><thead><tr>
-        <th class="col-day">№<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="originalRoute" class="sortable">Маршрут<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th>Код<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="day" class="sortable col-day">День<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
+        <th>День тижня<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="miniSchema" class="sortable">Схема<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="containerType" class="sortable">Тип<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="yardA" class="sortable" style="background-color: #fff3cd;">Автодвір А<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
@@ -859,10 +892,10 @@ function renderDetailedChunk() {
     for (let i = detailedRenderedCount; i < end; i++) {
         const item = filteredDetailedSchedules[i];
         html += `<tr>
-            <td class="col-day" style="color: #999;">${i + 1}</td>
             <td class="col-route">${item.originalRoute}</td>
             <td>${item.originalCode}</td>
             <td class="col-day" style="font-weight: bold;">${item.day}</td>
+            <td style="text-align: center; font-weight: bold; color: #495057;">${getDayOfWeekFromDotStr(item.day)}</td>
             <td style="text-align: center;">${item.miniSchema}</td>
             <td style="text-align: center;">${item.containerType}</td>
             <td style="font-weight: bold;">${item.yardA}</td>
@@ -901,11 +934,9 @@ function getAbsoluteMinutes(dateStr, timeStr) {
     const targetDateStr = parts.length === 2 ? parts[0] : dateStr;
     const targetTimeStr = parts.length === 2 ? parts[1] : timeStr;
 
-    // Парсим дату "DD.MM.YYYY"
     const [dd, mm, yyyy] = targetDateStr.split('.');
     const [hh, min] = targetTimeStr.split(':').map(Number);
     
-    // Создаем реальный объект даты и возвращаем минуты с 1970 года
     const dateObj = new Date(yyyy, mm - 1, dd, hh, min);
     return Math.floor(dateObj.getTime() / 60000); 
 }
@@ -923,18 +954,16 @@ function formatAbsoluteMinutes(mins) {
     return `${dd}.${mm}.${yyyy} ${hh}:${min}`;
 }
 
-// НОВАЯ ЛОГИКА "ПЕРШОЇ ПОСТАНОВКИ" (ПО ДНЯМ)
 function calculateRampTimes() {
     const interval = parseInt(document.getElementById('rampInterval').value, 10) || 10;
     
-    // Группируем по узлу и дню!
     const groups = {};
     detailedSchedules.forEach(item => {
         if (item.timeDepartureA === "—") return;
         const key = `${item.nodeA}_${item.day}`;
         if (!groups[key]) groups[key] = [];
         item.absDep = getAbsoluteMinutes(item.day, item.timeDepartureA);
-        item.timeDepartureA = formatAbsoluteMinutes(item.absDep); // Форматируем сразу
+        item.timeDepartureA = formatAbsoluteMinutes(item.absDep); 
         groups[key].push(item);
     });
     
@@ -959,7 +988,6 @@ function calculateRampTimes() {
                          item1.absDep === item2.absDep;
 
             let proposedPlacement;
-            // Если это первый контейнер дня и есть фиксированное время
             if (i === 0 && hasFixedFirst) {
                 proposedPlacement = firstAbs;
             } else {
@@ -1054,15 +1082,18 @@ function sortDetailedSchedules(key, thElement) {
     Array.from(tr.children).forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
     thElement.classList.add(asc ? 'sort-asc' : 'sort-desc');
 
-    applyFiltersDetailed();
+    // ИСПРАВЛЕНО: Вместо "призрачной" функции вызываем реальную синхронизацию фильтров
+    filteredDetailedSchedules = filterDataArray('tableContainerDetailed', detailedSchedules, getDetailedValues);
+    detailedRenderedCount = 0;
+    document.getElementById('detailedTableBody').innerHTML = "";
+    renderDetailedChunk();
     document.getElementById('tableContainerDetailed').scrollTop = 0; 
 }
 
-// ГЕНЕРАЦИЯ СОБЫТИЙ С ПРОВЕРКОЙ НОВЫХ ФЛАГОВ (1, 2, 3, 4)
+// ГЕНЕРАЦИЯ СОБЫТИЙ С ПРОВЕРКОЙ НА ПРИСУТСТВИЕ ФЛАГОВ
 function generateYardEvents() {
     yardEvents = [];
     
-    // 1. Сразу формируем список разрешенных дат (те, что выбрал логист в модалке)
     const allowedDates = generatedDatesList.map(d => {
         return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
     });
@@ -1083,8 +1114,6 @@ function generateYardEvents() {
             const formatted = formatAbsoluteMinutes(absMins); 
             const parts = formatted.split(' '); 
             
-            // --- ГЛАВНЫЙ ФИЛЬТР ---
-            // Если дата события перевалила за полночь и не входит в выбранный нами диапазон - отбрасываем!
             if (allowedDates.length > 0 && !allowedDates.includes(parts[0])) return;
 
             yardEvents.push({ yard: yard, code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins });
@@ -1119,6 +1148,7 @@ function generateYardEvents() {
             
             if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
                 const parts = item.timeUnloadEnd.split(' ');
+                // ИСПРАВЛЕНО: Исправлен критический вылет из-за nodeB вместо item.nodeB
                 addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
             }
         }
@@ -1141,6 +1171,7 @@ function initEventsTable() {
         <th>Код<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort-event="event" class="sortable">Подія<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort-event="day" class="sortable col-day">День<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
+        <th>День тижня<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort-event="time" class="sortable">Час<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
     </tr></thead><tbody id="eventsTableBody"></tbody></table>`;
     
@@ -1165,6 +1196,7 @@ function renderEventsChunk() {
             <td>${ev.code}</td>
             <td>${ev.event}</td>
             <td class="col-day" style="font-weight: bold;">${ev.day}</td>
+            <td style="text-align: center; font-weight: bold; color: #495057;">${getDayOfWeekFromDotStr(ev.day)}</td>
             <td style="text-align: center;">${ev.time}</td>
         </tr>`;
     }
@@ -1172,23 +1204,25 @@ function renderEventsChunk() {
     eventsRenderedCount = end;
 }
 
-// ==========================================
-// НОВЫЙ БЛОК РАСЧЕТА ФЛОТА (KamagИ И МАНЫ)
-// ==========================================
-let totalOpsData = {}; 
-let fleetActiveState = {}; 
-
 function calculateFleetRequirements() {
-    totalOpsData = {}; 
-    fleetActiveState = {}; 
+    // ИЗМЕНЕНИЕ: Пересчитываем базовые операции из yardEvents ТОЛЬКО если они физически есть в памяти (Режим Excel)
+    if (yardEvents && yardEvents.length > 0) {
+        totalOpsData = {}; 
+        yardEvents.forEach(ev => {
+            if (!totalOpsData[ev.yard]) totalOpsData[ev.yard] = {};
+            if (!totalOpsData[ev.yard][ev.day]) totalOpsData[ev.yard][ev.day] = Array(24).fill(0);
+            const hour = parseInt(ev.time.split(':')[0], 10);
+            if (!isNaN(hour)) totalOpsData[ev.yard][ev.day][hour]++;
+        });
+    }
 
-    // Считаем все операции
-    yardEvents.forEach(ev => {
-        if (!totalOpsData[ev.yard]) totalOpsData[ev.yard] = {};
-        if (!totalOpsData[ev.yard][ev.day]) totalOpsData[ev.yard][ev.day] = Array(24).fill(0);
-        const hour = parseInt(ev.time.split(':')[0], 10);
-        if (!isNaN(hour)) totalOpsData[ev.yard][ev.day][hour]++;
-    });
+    // ИЗМЕНЕНИЕ: Жесткая защита. Если данных нет вообще нигде (ни в событиях, ни загруженных из БД) — прерываемся, чтобы не ломать интерфейс
+    if (Object.keys(totalOpsData).length === 0) {
+        return;
+    }
+
+    fleetActiveState = {}; 
+    const virtualType = document.querySelector('input[name="virtualFleetType"]:checked')?.value || 'kamag';
 
     const yardNorms = {};
     for(let node in yardDictionary) {
@@ -1205,29 +1239,36 @@ function calculateFleetRequirements() {
         const normM = yardNorms[yard] ? yardNorms[yard].m : 6;
 
         let maxExtraK = 0;
+        let maxExtraM = 0;
+
         for (let day in totalOpsData[yard]) {
             for (let h = 0; h < 24; h++) {
                 let ops = totalOpsData[yard][day][h];
                 let cap = (availK * normK) + (availM * normM);
                 if (ops > cap) {
-                    let extra = Math.ceil((ops - cap) / normK);
-                    if (extra > maxExtraK) maxExtraK = extra;
+                    if (virtualType === 'kamag') {
+                        let extra = Math.ceil((ops - cap) / normK);
+                        if (extra > maxExtraK) maxExtraK = extra;
+                    } else {
+                        let extra = Math.ceil((ops - cap) / normM);
+                        if (extra > maxExtraM) maxExtraM = extra;
+                    }
                 }
             }
         }
 
         const totalK = availK + maxExtraK;
+        const totalM = availM + maxExtraM;
 
         for (let day in totalOpsData[yard]) {
             fleetActiveState[yard][day] = Array(24).fill(null).map(() => ({ 
                 kamag: Array(totalK).fill(0), 
-                man: Array(availM).fill(0) 
+                man: Array(totalM).fill(0) 
             }));
             
             for (let h = 0; h < 24; h++) {
                 let neededOps = totalOpsData[yard][day][h];
                 
-                // 1. Насыщаем ФИЗИЧЕСКИЕ Kamagи
                 let assignedK = 0;
                 while (neededOps > 0 && assignedK < availK) {
                     fleetActiveState[yard][day][h].kamag[assignedK] = 1;
@@ -1235,7 +1276,6 @@ function calculateFleetRequirements() {
                     neededOps -= normK;
                 }
                 
-                // 2. Насыщаем ФИЗИЧЕСКИЕ МАНы
                 let assignedM = 0;
                 while (neededOps > 0 && assignedM < availM) {
                     fleetActiveState[yard][day][h].man[assignedM] = 1;
@@ -1243,12 +1283,32 @@ function calculateFleetRequirements() {
                     neededOps -= normM;
                 }
 
-                // 3. Если все еще не хватает - насыщаем ВИРТУАЛЬНЫЕ Kamagи (Потреба)
-                while (neededOps > 0 && assignedK < totalK) {
-                    fleetActiveState[yard][day][h].kamag[assignedK] = 1;
-                    assignedK++;
-                    neededOps -= normK;
+                if (virtualType === 'kamag') {
+                    while (neededOps > 0 && assignedK < totalK) {
+                        fleetActiveState[yard][day][h].kamag[assignedK] = 1;
+                        assignedK++;
+                        neededOps -= normK;
+                    }
+                } else {
+                    while (neededOps > 0 && assignedM < totalM) {
+                        fleetActiveState[yard][day][h].man[assignedM] = 1;
+                        assignedM++;
+                        neededOps -= normM;
+                    }
                 }
+            }
+        }
+    }
+
+    // Фотографируем автоматический расчет в systemFleetState
+    for (let y in totalOpsData) {
+        systemFleetState[y] = {};
+        for (let day in totalOpsData[y]) {
+            if (fleetActiveState[y] && fleetActiveState[y][day]) {
+                systemFleetState[y][day] = fleetActiveState[y][day].map(hourObj => ({
+                    kamag: [...hourObj.kamag],
+                    man: [...hourObj.man]
+                }));
             }
         }
     }
@@ -1275,13 +1335,19 @@ function renderKamagTable() {
         return;
     }
 
+    // Сохраняем положение скролла перед рендерингом для исключения прыжков экрана
+    const savedScrollLeft = wrapper ? wrapper.scrollLeft : 0;
+    const savedScrollTop = wrapper ? wrapper.scrollTop : 0;
+
     const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
     const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
     
     let totalK = availK;
+    let totalM = availM;
     const availableDates = Object.keys(fleetActiveState[yard] || {});
-    if (availableDates.length > 0) {
+    if (availableDates.length > 0 && fleetActiveState[yard][availableDates[0]][0]) {
         totalK = fleetActiveState[yard][availableDates[0]][0].kamag.length;
+        totalM = fleetActiveState[yard][availableDates[0]][0].man.length;
     }
 
     const yardNorms = { k: 12, m: 6 };
@@ -1293,23 +1359,7 @@ function renderKamagTable() {
         }
     }
 
-    const startStr = document.getElementById('kamagStartDate').value;
-    const endStr = document.getElementById('kamagEndDate').value;
-    const startDate = startStr ? new Date(startStr).setHours(0,0,0,0) : null;
-    const endDate = endStr ? new Date(endStr).setHours(23,59,59,999) : null;
-
-    const daysOfWeek = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
-        const [d1, m1, y1] = a.split('.');
-        const [d2, m2, y2] = b.split('.');
-        return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
-    }).filter(d => {
-        const [dd, mm, yyyy] = d.split('.');
-        const currentD = new Date(yyyy, mm-1, dd).getTime();
-        
-        if (startDate && currentD < startDate) return false;
-        if (endDate && currentD > endDate) return false;
-        return true;
-    });
+    const daysOfWeek = getFilteredDays(yard);
 
     function generateMatrixHTML(title, rowHeaders, dataProvider, includeCharts = false) {
         let html = `<h3 style="margin: 5px 0 5px 0; color: #334155; border-left: 4px solid #ffaa00; padding-left: 10px;">${title}</h3><table><thead><tr><th style="min-width: 120px;"></th>`;
@@ -1331,11 +1381,8 @@ function renderKamagTable() {
         
         let totalTooltip = isFleet ? "Сумарна кількість годин роботи за обраний період" : "Загальна кількість операцій за обраний період";
         let sigmaTooltip = isFleet ? "Годин роботи за добу" : "Кількість за добу";
-        
-        // Динамічна назва для кутової клітинки
         let rowHeaderLabel = isFleet ? "ТЗ / Години" : "Операції / Години";
 
-        // Добавили единицу измерения в шапку "Всього"
         html += `<th title="${totalTooltip}" style="text-align: center; line-height: 1.2; cursor: help;">Всього,<br>${unit}</th></tr><tr><th style="font-size: 10px;">${rowHeaderLabel}</th>`;
         
         daysOfWeek.forEach(d => {
@@ -1343,13 +1390,22 @@ function renderKamagTable() {
                 let borderStyle = i === 0 ? "border-left: 2px solid #6c757d;" : "";
                 html += `<th class="kamag-header-vertical" style="${borderStyle}">${i}:00</th>`;
             }
-            // Добавили единицу измерения к сигме: Σ, год или Σ, шт
             html += `<th title="${sigmaTooltip}" style="text-align: center; font-weight: bold; font-size: 10px; background-color: #dee2e6; border-right: 2px solid #6c757d; min-width: 40px; cursor: help;">Σ, ${unit}</th>`;
         });
         html += `<th></th></tr></thead><tbody>`;
 
         rowHeaders.forEach(rowName => {
-            html += `<tr><td style="font-weight: bold; font-size: 11px; white-space: normal;">${rowName}</td>`;
+            let isKamag = rowName.startsWith("Kamag");
+            let dataType = isKamag ? "kamag" : "man";
+            let match = rowName.match(/\d+/);
+            let idx = match ? parseInt(match[0]) - 1 : 0;
+
+            if (isFleet) {
+                html += `<tr><td class="fleet-row-header" data-yard="${yard}" data-type="${dataType}" data-index="${idx}" style="font-weight: bold; font-size: 11px; white-space: normal; cursor: pointer;" title="Клікніть, щоб скинути всі одинички цього рядка за обраний період">${rowName}</td>`;
+            } else {
+                html += `<tr><td style="font-weight: bold; font-size: 11px; white-space: normal;">${rowName}</td>`;
+            }
+
             let totalRowSum = 0;
             
             daysOfWeek.forEach(d => {
@@ -1358,35 +1414,31 @@ function renderKamagTable() {
                     let val = dataProvider(rowName, d, h);
                     let borderStyle = h === 0 ? "border-left: 2px solid #6c757d;" : "";
                     
-                    if (title.includes("Машини") || title.includes("Флот")) {
-                        const isKamag = rowName.startsWith("Kamag");
-                        const match = rowName.match(/\d+/);
-                        const idx = match ? parseInt(match[0]) - 1 : 0;
-                        
+                    if (isFleet) {
                         let isActive = val > 0;
                         let isManual = val === 2;
                         let cellClass = "kamag-cell kamag-editable";
 
                         if (isActive) {
                             if (isManual) {
-                                // Ручная постановка: проверяем, виртуальная машина или физическая
                                 if (isKamag && idx >= availK) cellClass += " kamag-manual-virtual";
+                                else if (!isKamag && idx >= availM) cellClass += " kamag-manual-virtual";
                                 else cellClass += " kamag-manual-physical";
                             } else {
-                                // Автоматическая постановка
                                 if (isKamag && idx >= availK) cellClass += " kamag-active-virtual";
+                                else if (!isKamag && idx >= availM) cellClass += " kamag-active-virtual";
                                 else cellClass += " kamag-active";
                             }
                         }
 
-                        let dataType = isKamag ? "kamag" : "man";
                         html += `<td class="${cellClass}" style="${borderStyle} cursor:pointer;" data-yard="${yard}" data-day="${d}" data-hour="${h}" data-type="${dataType}" data-index="${idx}">${isActive ? 1 : ''}</td>`;
                         if (isActive) { dailySum++; totalRowSum++; }
                     } else {
                         let cellStyle = "background-color: #fff9c4; font-weight: bold;";
                         if (val !== 0 && val !== "") {
                             html += `<td class="kamag-cell" style="${borderStyle} ${cellStyle}">${val}</td>`;
-                            if (typeof val === 'number') { dailySum += val; totalRowSum += val; }
+                            let numVal = typeof val === 'number' ? val : (parseInt(val.replace(/<[^>]*>/g, ''), 10) || 0);
+                            dailySum += numVal; totalRowSum += numVal;
                         } else {
                             html += `<td class="kamag-cell" style="${borderStyle}"></td>`;
                         }
@@ -1400,7 +1452,7 @@ function renderKamagTable() {
         if (includeCharts) {
             html += `<tr><td style="font-weight: bold; font-size: 11px;">Графік</td>`;
             daysOfWeek.forEach((d, index) => {
-                html += `<td colspan="24" style="border-left: 2px solid #6c757d; vertical-align: bottom; padding: 0; background: #fff;"><div style="height: 85px; width: 100%;"><canvas id="chart_${index}"></canvas></div></td><td style="border-right: 2px solid #6c757d; background-color: #dee2e6;"></td>`;
+                html += `<td colspan="24" style="border-left: 2px solid #6c757d; vertical-align: bottom; padding: 0; background: #fff;"><div style="height: 135px; width: 100%;"><canvas id="chart_${index}"></canvas></div></td><td style="border-right: 2px solid #6c757d; background-color: #dee2e6;"></td>`;
             });
             html += `<td style="background-color: #e9ecef;"></td></tr>`;
         }
@@ -1412,10 +1464,13 @@ function renderKamagTable() {
     const rowHeaders = [];
     
     for(let i=1; i<=availK; i++) rowHeaders.push(`Kamag ${i}`);
-    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
-    
     if (!hideVirtual) {
         for(let i=availK+1; i<=totalK; i++) rowHeaders.push(`Kamag ${i} (дод.)`);
+    }
+
+    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
+    if (!hideVirtual) {
+        for(let i=availM+1; i<=totalM; i++) rowHeaders.push(`Маневровий ${i} (дод.)`);
     }
     
     let fleetHTML = generateMatrixHTML(`Флот`, rowHeaders, (row, day, hour) => {
@@ -1427,34 +1482,51 @@ function renderKamagTable() {
         return isKamag ? state.kamag[idx] : state.man[idx];
     });
 
-    const opsHTML = generateMatrixHTML(`Операції`, ["Всього операцій", "Непокриті (фіз. флот)", "Непокриті (залишок)"], (row, day, hour) => {
+    const opsHTML = generateMatrixHTML(`Операції`, [
+        "Всього операцій", 
+        "Задіяно фіз. КАМАГ", 
+        "Задіяно вірт. КАМАГ", 
+        "Задіяно фіз. МАН", 
+        "Задіяно вірт. МАН", 
+        "Непокриті (фіз. флот)", 
+        "Непокриті (залишок)"
+    ], (row, day, hour) => {
         const totalOps = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
-        
         if (row === "Всього операцій") return totalOps;
 
-        let capPhysical = 0;
-        let capTotal = 0;
-
+        let activePhysK = 0, activeVirtK = 0, activePhysM = 0, activeVirtM = 0;
         if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][hour]) {
             const st = fleetActiveState[yard][day][hour];
-            const activePhysK = st.kamag.slice(0, availK).filter(Boolean).length;
-            const activePhysM = st.man.filter(Boolean).length;
-            capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
-
-            const activeTotalK = hideVirtual ? activePhysK : st.kamag.filter(Boolean).length;
-            capTotal = (activeTotalK * yardNorms.k) + (activePhysM * yardNorms.m);
+            activePhysK = st.kamag.slice(0, availK).filter(Boolean).length;
+            activeVirtK = st.kamag.slice(availK).filter(Boolean).length;
+            activePhysM = st.man.slice(0, availM).filter(Boolean).length;
+            activeVirtM = st.man.slice(availM).filter(Boolean).length;
         }
+
+        if (row === "Задіяно фіз. КАМАГ") return activePhysK || "";
+        if (row === "Задіяно вірт. КАМАГ") return activeVirtK || "";
+        if (row === "Задіяно фіз. МАН") return activePhysM || "";
+        if (row === "Задіяно вірт. МАН") return activeVirtM || "";
+
+        const capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
+        const activeTotalK = hideVirtual ? activePhysK : (activePhysK + activeVirtK);
+        const activeTotalM = hideVirtual ? activePhysM : (activePhysM + activeVirtM);
+        const capTotal = (activeTotalK * yardNorms.k) + (activeTotalM * yardNorms.m);
 
         if (row === "Непокриті (фіз. флот)") {
             const uncoveredPhys = Math.max(0, totalOps - capPhysical);
-            return `<span id="uncovered_phys_${day}_${hour}" class="${uncoveredPhys > 0 ? 'uncovered-alert' : ''}">${uncoveredPhys > 0 ? uncoveredPhys : ''}</span>`;
+            return uncoveredPhys > 0 ? `<span class="uncovered-alert">${uncoveredPhys}</span>` : '';
         } else {
             const uncoveredAbs = Math.max(0, totalOps - capTotal);
-            return `<span id="uncovered_abs_${day}_${hour}" class="${uncoveredAbs > 0 ? 'uncovered-alert' : ''}">${uncoveredAbs > 0 ? uncoveredAbs : ''}</span>`;
+            return uncoveredAbs > 0 ? `<span class="uncovered-alert">${uncoveredAbs}</span>` : '';
         }
     }, true);
 
     wrapper.innerHTML = fleetHTML + "<div style='height: 10px;'></div>" + opsHTML;
+
+    // Восстановление позиции прокрутки для плавности работы
+    wrapper.scrollLeft = savedScrollLeft;
+    wrapper.scrollTop = savedScrollTop;
 
     if (window.myDayCharts) window.myDayCharts.forEach(c => c.destroy());
     window.myDayCharts = [];
@@ -1464,8 +1536,7 @@ function renderKamagTable() {
         if (!ctx) return;
         const parentDiv = ctx.parentElement;
         
-        // Змінюємо висоту з 60 на 85
-        ctx.width = parentDiv.clientWidth; ctx.height = 85; 
+        ctx.width = parentDiv.clientWidth; ctx.height = 135; 
 
         const chartLabels = [], opsData = [], capacityData = [];
         for (let h = 0; h < 24; h++) {
@@ -1474,12 +1545,11 @@ function renderKamagTable() {
             let cap = 0;
             if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
                 const st = fleetActiveState[yard][d][h];
-                
-                // ЗМІНА: Дивимось на чекбокс, щоб брати потрібну кількість Kamag-ів
                 const activeK = hideVirtual ? st.kamag.slice(0, availK).filter(Boolean).length : st.kamag.filter(Boolean).length;
+                const activeM = hideVirtual ? st.man.slice(0, availM).filter(Boolean).length : st.man.filter(Boolean).length;
                 
                 cap += activeK * yardNorms.k;
-                cap += st.man.filter(Boolean).length * yardNorms.m;
+                cap += activeM * yardNorms.m;
             }
             capacityData.push(cap);
         }
@@ -1500,15 +1570,14 @@ function renderKamagTable() {
                     y: { type: 'linear', display: false, beginAtZero: true } 
                 }, 
                 plugins: { 
-                    // ВМИКАЄМО ТА НАЛАШТОВУЄМО ЛЕГЕНДУ
                     legend: { 
                         display: true,
                         position: 'bottom',
                         align: 'center',
                         labels: {
-                            boxWidth: 12,      // Розмір квадратика/лінії
-                            font: { size: 10 }, // Компактний шрифт
-                            padding: 4         // Відступ, щоб не злипалось
+                            boxWidth: 12,      
+                            font: { size: 10 }, 
+                            padding: 4         
                         }
                     }, 
                     tooltip: { callbacks: { title: (items) => `${d} ${items[0].label}`, label: (item) => `${item.dataset.label}: ${item.raw}` } } 
@@ -1521,8 +1590,32 @@ function renderKamagTable() {
 
 document.getElementById('kamagYardSelect').addEventListener('change', renderKamagTable);
 
-// КЛИКИ ПО МАТРИЦЕ ФЛОТА
+// КЛИКИ ПО МАТРИЦЕ ФЛОТА (ДЕЛЕГИРОВАНИЕ)
 document.getElementById('kamagTableWrapper').addEventListener('click', function(e) {
+    // Снятие единиц кликом на имя ТЗ по отфильтрованному периоду
+    if (e.target.classList.contains('fleet-row-header')) {
+        if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
+        const header = e.target;
+        const yard = header.getAttribute('data-yard');
+        const type = header.getAttribute('data-type');
+        const idx = parseInt(header.getAttribute('data-index'));
+
+        if (!confirm(`Очистити всі одинички для "${header.innerText}" за обраний період відображення?`)) return;
+
+        const days = getFilteredDays(yard);
+        days.forEach(day => {
+            for (let h = 0; h < 24; h++) {
+                if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][h]) {
+                    fleetActiveState[yard][day][h][type][idx] = 0;
+                }
+            }
+        });
+
+        renderKamagTable();
+        return;
+    }
+
+    // Клик по ячейке с единичкой
     if (e.target.classList.contains('kamag-editable')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
         const cell = e.target;
@@ -1533,74 +1626,23 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
         const idx = parseInt(cell.getAttribute('data-index'));
 
         const currentState = fleetActiveState[yard][day][hour][type][idx];
-        const newState = currentState > 0 ? 0 : 2; 
-        fleetActiveState[yard][day][hour][type][idx] = newState;
-        
-        const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+        let newState = 0;
 
-        if (newState > 0) {
-            if (newState === 2) {
-                // Логист кликнул руками
-                if (type === 'kamag' && idx >= availK) cell.classList.add('kamag-manual-virtual');
-                else cell.classList.add('kamag-manual-physical');
-            } else {
-                // Система поставила (на случай, если захочешь возвращать авто-режим)
-                if (type === 'kamag' && idx >= availK) cell.classList.add('kamag-active-virtual');
-                else cell.classList.add('kamag-active');
-            }
-            cell.innerText = '1';
+        if (currentState > 0) {
+            newState = 0; 
         } else {
-            // Удаляем все возможные классы при выключении
-            cell.classList.remove('kamag-active', 'kamag-active-virtual', 'kamag-manual-physical', 'kamag-manual-virtual');
-            cell.innerText = '';
+            // Умная проверка: была ли ячейка изначально создана системой
+            const wasSystemActive = systemFleetState[yard] && 
+                                    systemFleetState[yard][day] && 
+                                    systemFleetState[yard][day][hour] && 
+                                    systemFleetState[yard][day][hour][type] && 
+                                    systemFleetState[yard][day][hour][type][idx] === 1;
+            
+            newState = wasSystemActive ? 1 : 2; 
         }
-
-        const yardNorms = { k: 12, m: 6 };
-        for(let node in yardDictionary) {
-            if(yardDictionary[node].yard === yard) {
-                yardNorms.k = yardDictionary[node].normKamag || 12;
-                yardNorms.m = yardDictionary[node].normMan || 6;
-                break;
-            }
-        }
-
-        const totalOps = totalOpsData[yard][day][hour] || 0;
         
-        const hideVirtual = document.getElementById('hideVirtualFleet').checked;
-        const activePhysK = fleetActiveState[yard][day][hour].kamag.slice(0, availK).filter(Boolean).length;
-        const activePhysM = fleetActiveState[yard][day][hour].man.filter(Boolean).length;
-        
-        const capPhysical = activePhysK * yardNorms.k + activePhysM * yardNorms.m;
-        
-        // ЗМІНА: Розраховуємо загальну потужність з оглядкою на чекбокс
-        const activeTotalK = hideVirtual ? activePhysK : fleetActiveState[yard][day][hour].kamag.filter(Boolean).length;
-        const capTotal = activeTotalK * yardNorms.k + activePhysM * yardNorms.m;
-        
-        const uncoveredPhys = Math.max(0, totalOps - capPhysical);
-        
-        const uncoveredPhysCell = document.getElementById(`uncovered_phys_${day}_${hour}`);
-        if (uncoveredPhysCell) {
-            uncoveredPhysCell.innerText = uncoveredPhys > 0 ? uncoveredPhys : '';
-            uncoveredPhysCell.className = uncoveredPhys > 0 ? 'uncovered-alert' : '';
-        }
-
-        const uncoveredAbs = Math.max(0, totalOps - capTotal);
-        const uncoveredAbsCell = document.getElementById(`uncovered_abs_${day}_${hour}`);
-        if (uncoveredAbsCell) {
-            uncoveredAbsCell.innerText = uncoveredAbs > 0 ? uncoveredAbs : '';
-            uncoveredAbsCell.className = uncoveredAbs > 0 ? 'uncovered-alert' : '';
-        }
-
-        const daysOfYard = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
-            const [d1, m1, y1] = a.split('.');
-            const [d2, m2, y2] = b.split('.');
-            return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
-        });
-        const dayIndex = daysOfYard.indexOf(day);
-        if (window.myDayCharts && window.myDayCharts[dayIndex]) {
-            window.myDayCharts[dayIndex].data.datasets[0].data[hour] = capTotal; 
-            window.myDayCharts[dayIndex].update();
-        }
+        fleetActiveState[yard][day][hour][type][idx] = newState;
+        renderKamagTable();
     }
 });
 
@@ -1617,6 +1659,7 @@ function assignKamagsToEvents() {
         if (!hourTracker[key]) hourTracker[key] = 0;
         
         const availK = fleetDictionary[ev.yard] ? fleetDictionary[ev.yard].kamag : 0;
+        const availM = fleetDictionary[ev.yard] ? fleetDictionary[ev.yard].man : 0;
 
         if (fleetActiveState[ev.yard] && fleetActiveState[ev.yard][ev.day] && fleetActiveState[ev.yard][ev.day][hour]) {
             const st = fleetActiveState[ev.yard][ev.day][hour];
@@ -1625,7 +1668,9 @@ function assignKamagsToEvents() {
             st.kamag.forEach((isActive, idx) => { 
                 if(isActive) activeResources.push(idx < availK ? `Kamag ${idx+1}` : `Kamag ${idx+1} (дод.)`); 
             });
-            st.man.forEach((isActive, idx) => { if(isActive) activeResources.push(`Маневровий ${idx+1}`); });
+            st.man.forEach((isActive, idx) => { 
+                if(isActive) activeResources.push(idx < availM ? `Маневровий ${idx+1}` : `Маневровий ${idx+1} (дод.)`); 
+            });
 
             if (activeResources.length > 0) {
                 const assignedMachine = activeResources[hourTracker[key] % activeResources.length];
@@ -1638,6 +1683,7 @@ function assignKamagsToEvents() {
 
     for (let y in fleetActiveState) {
         const availK = fleetDictionary[y] ? fleetDictionary[y].kamag : 0;
+        const availM = fleetDictionary[y] ? fleetDictionary[y].man : 0;
         for (let d in fleetActiveState[y]) {
             for (let h = 0; h < 24; h++) {
                 const st = fleetActiveState[y][d][h];
@@ -1649,7 +1695,7 @@ function assignKamagsToEvents() {
                         }
                     });
                     st.man.forEach((isActive, mIndex) => {
-                        const name = `Маневровий ${mIndex + 1}`;
+                        const name = mIndex < availM ? `Маневровий ${mIndex + 1}` : `Маневровий ${mIndex + 1} (дод.)`;
                         if (isActive && !activeKamagsLog[`${y}_${d}_${h}_${name}`]) {
                             yardEvents.push({ yard: y, code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
                         }
@@ -1660,9 +1706,6 @@ function assignKamagsToEvents() {
     }
     yardEvents.sort((a, b) => a.absMins - b.absMins);
 }
-// =========================================
-// ФІЛЬТРАЦІЯ ТА ЕКСПОРТ (ВОССТАНОВЛЕНО ПОЛНОСТЬЮ)
-// =========================================
 
 function getRawValues(item) {
     const vals = [
@@ -1682,10 +1725,10 @@ function getRawValues(item) {
 
 function getDetailedValues(item) {
     return [
-        "", // Місце під індекс
         item.originalRoute, 
         item.originalCode, 
         item.day, 
+        getDayOfWeekFromDotStr(item.day), 
         item.miniSchema, 
         item.containerType,
         item.yardA, 
@@ -1702,7 +1745,14 @@ function getDetailedValues(item) {
 }
 
 function getEventsValues(ev) {
-    return [ev.yard, ev.code, ev.event, ev.day, ev.time];
+    return [
+        ev.yard, 
+        ev.code, 
+        ev.event, 
+        ev.day, 
+        getDayOfWeekFromDotStr(ev.day), 
+        ev.time
+    ];
 }
 
 function filterDataArray(containerId, dataArray, valuesExtractor) {
@@ -1735,6 +1785,7 @@ document.addEventListener('input', function(e) {
         clearTimeout(filterTimeout);
         filterTimeout = setTimeout(() => {
             const container = e.target.closest('.table-container');
+            if (!container) return; // Защита от вылетов
             if (container.id === 'tableContainerRaw') {
                 filteredAllSchedules = filterDataArray('tableContainerRaw', allSchedules, getRawValues);
                 renderedCount = 0;
@@ -1755,8 +1806,7 @@ document.addEventListener('input', function(e) {
     }
 });
 
-// ВОССТАНОВЛЕННЫЙ И ОБНОВЛЕННЫЙ ЭКСПОРТ В EXCEL
-// ВОССТАНОВЛЕННЫЙ И ОБНОВЛЕННЫЙ ЭКСПОРТ В EXCEL
+// МОДЕРНИЗИРОВАННЫЙ ЭКСПОРТ В EXCEL (ПОВНІСТЮ ВИПРАВЛЕНИЙ)
 document.getElementById('exportExcelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('exportExcelBtn');
     const originalText = btn.innerText;
@@ -1776,12 +1826,17 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             filteredAllSchedules.forEach(item => sheet.addRow(getRawValues(item)));
 
         } else if (tabDetailed.classList.contains('active')) {
-            const headers = ["№", "Маршрут", "Код", "День", "Схема", "Тип", "Автодвір А", "Постановка", "Точка А", "Виїзд", "Автодвір Б", "Точка Б", "Приїзд", "Постановка (вивант.)", "Кінець вивант.", "Тип ТЗ"];
+            const headers = ["Маршрут", "Код", "День", "День тижня", "Схема", "Тип", "Автодвір А", "Постановка", "Точка А", "Виїзд", "Автодвір Б", "Точка Б", "Приїзд", "Постановка (вивант.)", "Кінець вивант.", "Тип ТЗ"];
             sheet.addRow(headers);
-            filteredDetailedSchedules.forEach((item, index) => {
-                let vals = getDetailedValues(item);
-                vals[0] = index + 1;
-                sheet.addRow(vals);
+            filteredDetailedSchedules.forEach((item) => {
+                sheet.addRow(getDetailedValues(item));
+            });
+
+        } else if (tabEvents.classList.contains('active')) {
+            const headers = ["Автодвір", "Код", "Подія", "День", "День тижня", "Час"];
+            sheet.addRow(headers);
+            filteredYardEvents.forEach((ev) => {
+                sheet.addRow(getEventsValues(ev));
             });
 
         } else if (tabKamag.classList.contains('active')) {
@@ -1791,9 +1846,19 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             const endDate = endStr ? new Date(endStr).setHours(23,59,59,999) : null;
             const hideVirtual = document.getElementById('hideVirtualFleet').checked;
 
-            const yardsToExport = Object.keys(totalOpsData).sort();
+            // Читаем режим экспорта из нашего нового верхнего дропдауна
+            const exportMode = document.getElementById('exportModeSelect').value;
+            let yardsToExport = [];
+
+            if (exportMode === 'current') {
+                const currentYard = document.getElementById('kamagYardSelect').value;
+                if (currentYard) yardsToExport.push(currentYard);
+            } else {
+                yardsToExport = Object.keys(totalOpsData).sort();
+            }
+
             if (yardsToExport.length === 0) {
-                alert("Немає розрахованих даних для жодного автодвору!");
+                alert("Немає розрахованих даних для експорту!");
                 btn.innerText = originalText;
                 btn.disabled = false;
                 return;
@@ -1803,10 +1868,10 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9ECEF' } };
             const fillSum = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F3F5' } };
             
-            const fillActive = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBDEFB' } }; // Синий (физ флот)
-            const fillActiveVirtual = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } }; // Оранжевый (виртуальный флот)
+            const fillActive = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBDEFB' } }; 
+            const fillActiveVirtual = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } }; 
             const fillOps = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
-            const fillUncovered = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBEE' } }; // Красный дефицит
+            const fillUncovered = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBEE' } }; 
             const fontUncovered = { bold: true, size: 9, color: { argb: 'FFD32F2F' } };
 
             const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
@@ -1818,11 +1883,19 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 right: isRightEdge ? borderMedium : borderThin
             });
 
-            // Проходим циклом по всем доступным автодворам в базе расчетов
             yardsToExport.forEach(yard => {
-                // Имя листа в Excel ограничено 31 символом
                 const sheetName = yard.substring(0, 31).replace(/[\\\?\*\[\]\/]/g, "");
                 const sheet = workbook.addWorksheet(sheetName);
+
+                // ІНІЦІАЛІЗАЦІЯ НОРМАТИВІВ ЦЬОГО АВТОДВОРУ (ПОВЕРНЕНО СЮДИ)
+                const yardNorms = { k: 12, m: 6 };
+                for(let node in yardDictionary) {
+                    if(yardDictionary[node].yard === yard) {
+                        yardNorms.k = yardDictionary[node].normKamag || 12;
+                        yardNorms.m = yardDictionary[node].normMan || 6;
+                        break;
+                    }
+                }
 
                 const days = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
                     const [d1, m1, y1] = a.split('.');
@@ -1836,9 +1909,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                     return true;
                 });
 
-                if (days.length === 0) return; // Если по фильтрам дат нет данных для этого двора, пропускаем
+                if (days.length === 0) return; 
 
-                // Настройка ширины колонок динамически под количество дней
                 sheet.getColumn(1).width = 18; 
                 for (let i = 2; i <= 1 + 25 * days.length; i++) {
                     sheet.getColumn(i).width = 3.5; 
@@ -1849,7 +1921,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 sheet.addRow([`Звіт по Флоту: ${yard}`]).font = { bold: true, size: 14 };
                 sheet.addRow([]);
 
-                // Строка "День"
                 const rowDays = sheet.addRow(["День"]);
                 rowDays.getCell(1).font = { bold: true };
                 rowDays.getCell(1).alignment = alignCenter;
@@ -1875,7 +1946,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 sheet.getCell(3, 2 + 25 * days.length).value = "Всього";
                 sheet.getCell(3, 2 + 25 * days.length).font = { bold: true };
 
-                // Строка "Часы"
                 const rowHours = sheet.addRow(["Рядок / Години"]);
                 rowHours.getCell(1).font = { size: 10 };
                 
@@ -1902,9 +1972,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
                 
                 let totalK = availK;
+                let totalM = availM;
                 const availableDates = Object.keys(fleetActiveState[yard] || {});
                 if (availableDates.length > 0 && fleetActiveState[yard][availableDates[0]][0]) {
                     totalK = fleetActiveState[yard][availableDates[0]][0].kamag.length;
+                    totalM = fleetActiveState[yard][availableDates[0]][0].man.length;
                 }
 
                 // === 1. ВЫВОД ФИЗИЧЕСКИХ КАМАГОВ ===
@@ -1925,7 +1997,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                             cell.border = getBorders(h === 0, false);
                             
                             if (val === 1) {
-                                cell.fill = fillActive; // Синий цвет (физический)
+                                cell.fill = fillActive; 
                                 daySum++; weekTotal++;
                             }
                             cCol++;
@@ -1963,7 +2035,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                             cell.border = getBorders(h === 0, false);
                             
                             if (val === 1) {
-                                cell.fill = fillActive; // Синий цвет (физический)
+                                cell.fill = fillActive; 
                                 daySum++; weekTotal++;
                             }
                             cCol++;
@@ -2003,7 +2075,48 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                                 cell.border = getBorders(h === 0, false);
                                 
                                 if (val === 1) {
-                                    cell.fill = fillActiveVirtual; // Оранжевый цвет (виртуальный)
+                                    cell.fill = fillActiveVirtual; 
+                                    daySum++; weekTotal++;
+                                }
+                                cCol++;
+                            }
+                            const dSumCell = row.getCell(cCol);
+                            dSumCell.value = daySum || "";
+                            dSumCell.alignment = alignCenter;
+                            dSumCell.font = { bold: true };
+                            dSumCell.fill = fillSum;
+                            dSumCell.border = getBorders(false, true);
+                            cCol++;
+                        });
+                        
+                        const wSumCell = row.getCell(cCol);
+                        wSumCell.value = weekTotal;
+                        wSumCell.alignment = alignCenter;
+                        wSumCell.font = { bold: true };
+                        wSumCell.fill = fillHeader;
+                    }
+                }
+
+                // === 4. ВЫВОД ДОПОЛНИТЕЛЬНЫХ (ВИРТУАЛЬНЫХ) МАНОВ ===
+                if (!hideVirtual) {
+                    for (let m = availM + 1; m <= totalM; m++) {
+                        const rowLabel = `Маневровий ${m} (дод.)`;
+                        const row = sheet.addRow([rowLabel]);
+                        row.getCell(1).font = { bold: true, size: 10 };
+                        let weekTotal = 0;
+                        let cCol = 2;
+
+                        days.forEach(d => {
+                            let daySum = 0;
+                            for (let h = 0; h < 24; h++) {
+                                let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].man[m-1]) ? 1 : "";
+                                const cell = row.getCell(cCol);
+                                cell.value = val;
+                                cell.alignment = alignCenter;
+                                cell.border = getBorders(h === 0, false);
+                                
+                                if (val === 1) {
+                                    cell.fill = fillActiveVirtual; 
                                     daySum++; weekTotal++;
                                 }
                                 cCol++;
@@ -2026,112 +2139,77 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 }
                 sheet.addRow([]);
 
-                const yardNorms = { k: 12, m: 6 };
-                for(let node in yardDictionary) {
-                    if(yardDictionary[node].yard === yard) {
-                        yardNorms.k = yardDictionary[node].normKamag || 12;
-                        yardNorms.m = yardDictionary[node].normMan || 6;
-                        break;
-                    }
-                }
+                const excelOpsConfig = [
+                    "Всього операцій", 
+                    "Задіяно фіз. КАМАГ", 
+                    "Задіяно вірт. КАМАГ", 
+                    "Задіяно фіз. МАН", 
+                    "Задіяно вірт. МАН", 
+                    "Непокриті (фіз. флот)", 
+                    "Непокриті (залишок)"
+                ];
 
-                // Вывод ОПЕРАЦИЙ
-                const opsRow = sheet.addRow(["Всього операцій"]);
-                opsRow.getCell(1).font = { bold: true, size: 10 };
-                let totalWeekOps = 0;
-                let oCol = 2;
-                
-                days.forEach(d => {
-                    let daySum = 0;
-                    for (let h = 0; h < 24; h++) {
-                        let val = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
-                        const cell = opsRow.getCell(oCol);
-                        cell.value = val || "";
-                        cell.alignment = alignCenter;
-                        cell.font = { bold: true, size: 9 };
-                        cell.border = getBorders(h === 0, false);
-                        if (val > 0) cell.fill = fillOps;
-                        daySum += val;
-                        totalWeekOps += val;
+                excelOpsConfig.forEach(rowName => {
+                    const row = sheet.addRow([rowName]);
+                    row.getCell(1).font = { bold: true, size: 10 };
+                    let weekTotal = 0;
+                    let oCol = 2;
+
+                    days.forEach(d => {
+                        let daySum = 0;
+                        for (let h = 0; h < 24; h++) {
+                            let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
+                            let activePhysK = 0, activeVirtK = 0, activePhysM = 0, activeVirtM = 0;
+                            
+                            if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
+                                const st = fleetActiveState[yard][d][h];
+                                activePhysK = st.kamag.slice(0, availK).filter(Boolean).length;
+                                activeVirtK = st.kamag.slice(availK).filter(Boolean).length;
+                                activePhysM = st.man.slice(0, availM).filter(Boolean).length;
+                                activeVirtM = st.man.slice(availM).filter(Boolean).length;
+                            }
+
+                            let val = 0;
+                            let isUncovered = false;
+
+                            if (rowName === "Всього операцій") val = totalOps;
+                            else if (rowName === "Задіяно фіз. КАМАГ") val = activePhysK;
+                            else if (rowName === "Задіяно вірт. КАМАГ") val = activeVirtK;
+                            else if (rowName === "Задіяно фіз. МАН") val = activePhysM;
+                            else if (rowName === "Задіяно вірт. МАН") val = activeVirtM;
+                            else if (rowName === "Непокриті (фіз. флот)") {
+                                const capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
+                                val = Math.max(0, totalOps - capPhysical);
+                                isUncovered = true;
+                            } else if (rowName === "Непокриті (залишок)") {
+                                const activeTotalK = hideVirtual ? activePhysK : (activePhysK + activeVirtK);
+                                const activeTotalM = hideVirtual ? activePhysM : (activePhysM + activeVirtM);
+                                const capTotal = (activeTotalK * yardNorms.k) + (activeTotalM * yardNorms.m);
+                                val = Math.max(0, totalOps - capTotal);
+                                isUncovered = true;
+                            }
+
+                            const cell = row.getCell(oCol);
+                            cell.value = val || "";
+                            cell.alignment = alignCenter;
+                            cell.border = getBorders(h === 0, false);
+
+                            if (rowName === "Всього операцій" && val > 0) cell.fill = fillOps;
+                            if (isUncovered && val > 0) { cell.fill = fillUncovered; cell.font = fontUncovered; }
+                            
+                            daySum += val;
+                            weekTotal += val;
+                            oCol++;
+                        }
+                        const dSumCell = row.getCell(oCol);
+                        dSumCell.value = daySum || "";
+                        dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
                         oCol++;
-                    }
-                    const dSumCell = opsRow.getCell(oCol);
-                    dSumCell.value = daySum || "";
-                    dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
-                    oCol++;
+                    });
+
+                    const wSumCell = row.getCell(oCol);
+                    wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
                 });
-                const wOpsSumCell = opsRow.getCell(oCol);
-                wOpsSumCell.value = totalWeekOps; wOpsSumCell.alignment = alignCenter; wOpsSumCell.font = { bold: true }; wOpsSumCell.fill = fillHeader;
-
-                // Вывод НЕПОКРЫТЫХ (Физ флот)
-                const uncoveredPhysRow = sheet.addRow(["Непокриті (фіз. флот)"]);
-                uncoveredPhysRow.getCell(1).font = { bold: true, size: 10 };
-                let totalWeekUncoveredPhys = 0;
-                let uColPhys = 2;
-                
-                days.forEach(d => {
-                    let daySum = 0;
-                    for (let h = 0; h < 24; h++) {
-                        let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
-                        let capPhysical = 0;
-                        if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
-                            capPhysical += fleetActiveState[yard][d][h].kamag.slice(0, availK).filter(Boolean).length * yardNorms.k;
-                            capPhysical += fleetActiveState[yard][d][h].man.filter(Boolean).length * yardNorms.m;
-                        }
-                        let uncovered = Math.max(0, totalOps - capPhysical);
-
-                        const cell = uncoveredPhysRow.getCell(uColPhys);
-                        cell.value = uncovered || "";
-                        cell.alignment = alignCenter;
-                        cell.border = getBorders(h === 0, false);
-                        if (uncovered > 0) { cell.fill = fillUncovered; cell.font = fontUncovered; }
-                        daySum += uncovered;
-                        totalWeekUncoveredPhys += uncovered;
-                        uColPhys++;
-                    }
-                    const dSumCell = uncoveredPhysRow.getCell(uColPhys);
-                    dSumCell.value = daySum || "";
-                    dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
-                    uColPhys++;
-                });
-                const wUncoveredPhysSumCell = uncoveredPhysRow.getCell(uColPhys);
-                wUncoveredPhysSumCell.value = totalWeekUncoveredPhys; wUncoveredPhysSumCell.alignment = alignCenter; wUncoveredPhysSumCell.font = { bold: true }; wUncoveredPhysSumCell.fill = fillHeader;
-
-                // Вывод НЕПОКРЫТЫХ (Залишок с учетом виртуальных)
-                const uncoveredAbsRow = sheet.addRow(["Непокриті (залишок)"]);
-                uncoveredAbsRow.getCell(1).font = { bold: true, size: 10 };
-                let totalWeekUncoveredAbs = 0;
-                let uColAbs = 2;
-                
-                days.forEach(d => {
-                    let daySum = 0;
-                    for (let h = 0; h < 24; h++) {
-                        let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
-                        let capTotal = 0;
-                        if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
-                            const st = fleetActiveState[yard][d][h];
-                            const activeK = hideVirtual ? st.kamag.slice(0, availK).filter(Boolean).length : st.kamag.filter(Boolean).length;
-                            capTotal += activeK * yardNorms.k;
-                            capTotal += st.man.filter(Boolean).length * yardNorms.m;
-                        }
-                        let uncovered = Math.max(0, totalOps - capTotal);
-
-                        const cell = uncoveredAbsRow.getCell(uColAbs);
-                        cell.value = uncovered || "";
-                        cell.alignment = alignCenter;
-                        cell.border = getBorders(h === 0, false);
-                        if (uncovered > 0) { cell.fill = fillUncovered; cell.font = fontUncovered; }
-                        daySum += uncovered;
-                        totalWeekUncoveredAbs += uncovered;
-                        uColAbs++;
-                    }
-                    const dSumCell = uncoveredAbsRow.getCell(uColAbs);
-                    dSumCell.value = daySum || "";
-                    dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
-                    uColAbs++;
-                });
-                const wUncoveredAbsSumCell = uncoveredAbsRow.getCell(uColAbs);
-                wUncoveredAbsSumCell.value = totalWeekUncoveredAbs; wUncoveredAbsSumCell.alignment = alignCenter; wUncoveredAbsSumCell.font = { bold: true }; wUncoveredAbsSumCell.fill = fillHeader;
 
                 // ГЕНЕРАЦИЯ ДИНАМИЧЕСКИХ ГРАФИКОВ В ПАМЯТИ ДЛЯ КАЖДОГО ДНЯ
                 sheet.addRow([]);
@@ -2147,19 +2225,18 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                         if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
                             const st = fleetActiveState[yard][d][h];
                             const activeK = hideVirtual ? st.kamag.slice(0, availK).filter(Boolean).length : st.kamag.filter(Boolean).length;
+                            const activeM = hideVirtual ? st.man.slice(0, availM).filter(Boolean).length : st.man.filter(Boolean).length;
                             cap += activeK * yardNorms.k;
-                            cap += st.man.filter(Boolean).length * yardNorms.m;
+                            cap += activeM * yardNorms.m;
                         }
                         capacityData.push(cap);
                     }
 
-                    // Создаем виртуальный независимый canvas элемент в памяти
                     const canvas = document.createElement('canvas');
                     canvas.width = 620;
                     canvas.height = 100;
                     const ctx = canvas.getContext('2d');
 
-                    // Инициализируем временный экземпляр Chart.js без анимации
                     const tempChart = new Chart(ctx, {
                         type: 'bar',
                         data: { labels: chartLabels, datasets: [
@@ -2173,12 +2250,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                         }
                     });
 
-                    // Извлекаем изображение и уничтожаем временный график для экономии памяти
                     const base64 = canvas.toDataURL('image/png');
                     tempChart.destroy();
 
                     const imageId = workbook.addImage({
-                        base64: base64,
+                        base64: base64.split(',')[1],
                         extension: 'png',
                     });
                     
@@ -2188,7 +2264,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                     });
                 });
                 
-                for(let i=0; i<6; i++) sheet.addRow([]); // Резервируем место под картинки, чтобы строки не наезжали
+                for(let i=0; i<6; i++) sheet.addRow([]); 
             });
         }
 
@@ -2203,7 +2279,6 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
         btn.disabled = false;
     }
 });
-
 
 // СОХРАНЕНИЕ
 document.getElementById('saveGoogleBtn').addEventListener('click', async () => {
@@ -2238,7 +2313,6 @@ document.getElementById('saveGoogleBtn').addEventListener('click', async () => {
             await fetch(RESULTS_SCRIPT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                // ИЗМЕНЕНИЕ: Добавили dates: days
                 body: JSON.stringify({ action: 'saveAggregated', yard: yard, rows: aggregatedRows, dates: days })
             });
             btn.innerText = "✅ Збережено!";
@@ -2280,7 +2354,6 @@ document.getElementById('saveAllGoogleBtn').addEventListener('click', async () =
     });
 
     try {
-        // ИЗМЕНЕНИЕ: Собираем список всех уникальных дат по всем автодворам, которые участвуют в расчете
         const allDays = new Set();
         yards.forEach(y => {
             Object.keys(totalOpsData[y] || {}).forEach(day => allDays.add(day));
@@ -2289,7 +2362,6 @@ document.getElementById('saveAllGoogleBtn').addEventListener('click', async () =
         await fetch(RESULTS_SCRIPT_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            // ИЗМЕНЕНИЕ: Добавили dates: Array.from(allDays)
             body: JSON.stringify({ action: 'saveAllAggregated', yards: yards, rows: aggregatedRows, dates: Array.from(allDays) })
         });
         btn.innerText = "✅ Всі збережено!";
@@ -2303,9 +2375,18 @@ document.getElementById('saveAllGoogleBtn').addEventListener('click', async () =
     }, 3000);
 });
 
-// Автоматична активація вкладки при завантаженні
+// Автоматическая активация вкладки при загрузке
 document.addEventListener('DOMContentLoaded', () => {
     tabKamag.click();
+    
+    // Пересчитываем дефициты моментально при изменении переключателя KAMAG/МАН
+    document.querySelectorAll('input[name="virtualFleetType"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            if (Object.keys(totalOpsData).length > 0) {
+                calculateFleetRequirements();
+            }
+        });
+    });
 });
 
 document.getElementById('hideVirtualFleet').addEventListener('change', renderKamagTable);

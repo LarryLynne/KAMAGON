@@ -990,3 +990,40 @@ th.col-day .filter-input {
     background-color: #f1f3f5 !important;
     filter: none; /* Відміняємо затемнення тексту */
 }
+
+/* Контейнер для выравнивания элементов экспорта в шапке */
+.export-group {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* Стилизация выпадающего списка режимов */
+.export-mode-select {
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 12px;
+    background-color: #fff;
+    color: #495057;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.export-mode-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Сброс принудительных отступов кнопки внутри группы */
+.export-group .btn-export {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* Универсальный класс скрытия элементов */
+.hidden {
+    display: none !important;
+}

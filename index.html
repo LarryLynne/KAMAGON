@@ -29,9 +29,16 @@
                 <div id="progressBar" class="progress-bar"></div>
             </div>
 
-            <button id="exportExcelBtn" class="tab-btn btn-action btn-export">
-                Експорт в Excel
-            </button>
+            <div class="export-group">
+                <select id="exportModeSelect" class="export-mode-select hidden">
+                    <option value="all">Усі автодвори</option>
+                    <option value="current">Поточний автодвір</option>
+                </select>
+                
+                <button id="exportExcelBtn" class="tab-btn btn-action btn-export">
+                    Експорт в Excel
+                </button>
+            </div>
         </div>
 
         <div class="tabs">
@@ -99,6 +106,13 @@
                             <input type="checkbox" id="hideVirtualFleet">
                             Тільки існуючий флот
                         </label>
+
+                        <div class="compact-checkbox" style="display: flex; gap: 10px; align-items: center; background: #fff; padding: 0 10px; border: 1px solid #ced4da; border-radius: 4px; height: 28px; font-size: 11px;">
+                            <span style="font-weight: 600; color: #495057;">Розрахунок дод. ТЗ за рахунок:</span>
+                            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-weight: normal; margin: 0;"><input type="radio" name="virtualFleetType" value="kamag" checked style="margin:0; width:14px; height:14px;"> KAMAG</label>
+                            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-weight: normal; margin: 0;"><input type="radio" name="virtualFleetType" value="man" style="margin:0; width:14px; height:14px;"> МАН</label>
+                        </div>
+
                         <div class="legend-hover-wrapper">
                             <div class="legend-trigger">🎨 Легенда</div>
                             <div class="legend-popup">
