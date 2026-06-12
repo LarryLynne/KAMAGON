@@ -1819,11 +1819,20 @@ document.addEventListener('input', function(e) {
 document.getElementById('exportExcelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('exportExcelBtn');
     const originalText = btn.innerText;
-    btn.innerText = "⏳ Формування..."; btn.disabled = true;
+    //btn.innerText = "⏳ Формування...";
+    btn.disabled = true;
 
     try {
         const workbook = new ExcelJS.Workbook();
-        if (tabRaw.classList.contains('active')) {
+        if (tabCompare.classList.contains('active')) {
+            if (typeof window.exportCompareToExcel === 'function') {
+                await window.exportCompareToExcel(workbook);
+            } else {
+                alert("Немає розрахованих даних для експорту звірки!");
+                btn.innerText = originalText; btn.disabled = false; return;
+            }
+        }
+        else if (tabRaw.classList.contains('active')) {
             const headers = ["Маршрут", "Дедлайн", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд", "Початкова", "Приїзд", "Виїзд"];
             for(let i=1; i<=10; i++) headers.push(`П.Т. №${i}`, "Приїзд", "Виїзд");
             headers.push("Кінцева", "Приїзд", "Вивільнення", "Тип доставки", "Тип ТЗ", "Схема БДФ", "Формат", "Код", "Тип переміщення");

@@ -598,6 +598,7 @@ function fillCalculatedFleetMatrix(yard) {
 }
 
 // Наповнення Блоку 2: Стрічка подій
+// ЗАУВАЖЕННЯ ВИПРАВЛЕНО: Наповнення Блоку 2 з текстовими фільтрами по колонках
 function fillEventsContent(yard) {
     const container = document.getElementById('factContentEvents');
     const allowedDates = getFactFilteredDates(yard);
@@ -608,8 +609,12 @@ function fillEventsContent(yard) {
         return;
     }
 
-    let html = `<table><thead><tr>
-        <th>День</th><th>Час події</th><th>Рейс</th><th>Номер ТЗ</th><th>Назва операції</th>
+    let html = `<table id="factEventsTable"><thead><tr>
+        <th>День<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:100%; box-sizing:border-box;"></th>
+        <th>Час події<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:100%; box-sizing:border-box;"></th>
+        <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:100%; box-sizing:border-box;"></th>
+        <th>Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:100%; box-sizing:border-box;"></th>
+        <th>Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:100%; box-sizing:border-box;"></th>
     </tr></thead><tbody>`;
 
     filteredEvents.forEach(ev => {
@@ -625,6 +630,95 @@ function fillEventsContent(yard) {
     });
     html += `</tbody></table>`;
     container.innerHTML = html;
+    
+    attachFactLiveFilters('factEventsTable');
+}
+
+// ЗАУВАЖЕННЯ ВИПРАВЛЕНО: Наповнення Блоку 3 з текстовими фільтрами по колонках
+function fillFlightsContent(yard) {
+    const container = document.getElementById('factContentFlights');
+    const allowedDates = getFactFilteredDates(yard);
+    
+    const filtered = actualFlightsData.filter(f => {
+        const isMatchYard = f.yardA === yard || f.yardB === yard;
+        const flightDateStr = formatDateOnly(f.calculatedPlacement);
+        return isMatchYard && allowedDates.includes(flightDateStr);
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = "<p class='disabled'>Рейсів за обраний період не знайдено.</p>";
+        return;
+    }
+
+    let html = `<table id="factFlightsTable"><thead><tr>
+        <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:70px;"></th>
+        <th>Порядок<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:40px;"></th>
+        <th>Маршрут<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:120px;"></th>
+        <th>Відомість<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:80px;"></th>
+        <th>ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:80px;"></th>
+        <th>Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:80px;"></th>
+        <th>Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="6" style="width:80px;"></th>
+        <th>1. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="7" style="width:60px;"></th>
+        <th>Початок скан.<br><input type="text" class="fact-col-filter filter-input" data-col="8" style="width:60px;"></th>
+        <th>Кінець скан.<br><input type="text" class="fact-col-filter filter-input" data-col="9" style="width:60px;"></th>
+        <th>2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="10" style="width:60px;"></th>
+        <th>Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="11" style="width:60px;"></th>
+        <th>Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="12" style="width:80px;"></th>
+        <th>Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="13" style="width:80px;"></th>
+        <th>Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="14" style="width:60px;"></th>
+        <th>3. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="15" style="width:60px;"></th>
+        <th>4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="16" style="width:60px;"></th>
+    </tr></thead><tbody>`;
+
+    filtered.forEach(f => {
+        html += `<tr>
+            <td>${f.flight}</td>
+            <td style="text-align:center; font-weight:bold; color:#64748b;">${f.containerOrder}</td>
+            <td class="col-route">${f.route}</td>
+            <td>${f.statement}</td>
+            <td style="font-weight:bold; color:#0369a1;">${f.vehicle}</td>
+            <td>${f.yardA}</td><td>${f.nodeA}</td>
+            <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedPlacement)}</td>
+            <td>${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}</td>
+            <td>${f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—'}</td>
+            <td style="color:#b45309; font-weight:bold;">${formatTimeOnly(f.calculatedRampLeave)}</td>
+            <td>${f.departureStr ? f.departureStr.split(' ')[1] : '—'}</td>
+            <td>${f.yardB}</td><td>${f.nodeB}</td>
+            <td>${f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—'}</td>
+            <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedUnloadStart)}</td>
+            <td style="color:#b45309; font-weight:bold;">${formatTimeOnly(f.calculatedUnloadEnd)}</td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+    
+    attachFactLiveFilters('factFlightsTable');
+}
+
+// Функція «живого» приховування рядків без втрати фокусу інпута
+function attachFactLiveFilters(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    table.addEventListener('input', (e) => {
+        if (!e.target.classList.contains('fact-col-filter')) return;
+        const inputs = table.querySelectorAll('.fact-col-filter');
+        const rows = table.querySelectorAll('tbody tr');
+        
+        rows.forEach(row => {
+            let keep = true;
+            inputs.forEach(input => {
+                const colIdx = parseInt(input.getAttribute('data-col'), 10);
+                const filterVal = input.value.trim().toLowerCase();
+                if (filterVal) {
+                    const cellText = row.children[colIdx].textContent.toLowerCase();
+                    if (!cellText.includes(filterVal)) {
+                        keep = false;
+                    }
+                }
+            });
+            row.style.display = keep ? '' : 'none';
+        });
+    });
 }
 
 // Наповнення Блоку 3: Реєстр рейсів
