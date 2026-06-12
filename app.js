@@ -2,22 +2,20 @@
 let routeDictionary = {};
 let yardDictionary = {};
 let fleetDictionary = {}; 
-let usersDictionary = {}; // НОВЫЙ СЛОВАРЬ ПОЛЬЗОВАТЕЛЕЙ
+let usersDictionary = {}; // СЛОВАРЬ ПОЛЬЗОВАТЕЛЕЙ
 let totalOpsData = {}; 
 let fleetActiveState = {}; 
 let systemFleetState = {}; // Базовое состояние автоматического расчета системы
 
 function checkAuth() {
     return new Promise((resolve) => {
-        // Проверяем, авторизован ли уже пользователь
         if (sessionStorage.getItem('kamagonAuth') === 'true') {
             resolve(true);
             return;
         }
         
-        // Если справочники еще не загрузились, мы не можем проверить логин
         if (Object.keys(usersDictionary).length === 0) {
-            alert("Дочекайтеся завантаження даних з хмари!");
+            alert("Дочекайтеся завантаження даних!");
             resolve(false);
             return;
         }
@@ -35,12 +33,15 @@ function checkAuth() {
             const login = loginInput.value.trim();
             const pass = passInput.value.trim();
 
-            // Проверяем наличие логина в словаре и совпадение пароля
-            if (usersDictionary[login] && String(usersDictionary[login]) === pass) {
+            const userObj = usersDictionary[login];
+            if (userObj && String(userObj.pass) === pass) {
                 sessionStorage.setItem('kamagonAuth', 'true');
-                sessionStorage.setItem('kamagonAuthUser', login); // Сохраняем имя
+                sessionStorage.setItem('kamagonAuthUser', login);
+                sessionStorage.setItem('kamagonAuthRole', userObj.role); // Сохраняем роль
+                sessionStorage.setItem('kamagonAuthYard', userObj.yard); // Сохраняем двор
                 modal.style.display = 'none';
-                updateAuthVisibility(); // Показываем всё
+                updateAuthVisibility();
+                location.reload(); // Перезагружаем для применения жестких ограничений вкладок
                 resolve(true);
             } else {
                 alert("Невірний логін або пароль!");
@@ -56,39 +57,119 @@ function checkAuth() {
     });
 }
 
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ НАМЕРТВО ФИКСИРОВАНИЯ АВТОДВОРА ПОЛЬЗОВАТЕЛЯ РДУ
+function enforceUserYardLock(userYard) {
+    if (!userYard) return;
+    ['kamagYardSelect', 'factYardSelect', 'compareYardSelect'].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            // Если в списке вдруг нет такого двора, принудительно создаем его
+            let optionExists = Array.from(select.options).some(opt => opt.value === userYard);
+            if (!optionExists) {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = userYard;
+                select.appendChild(opt);
+            }
+            select.value = userYard;
+            select.disabled = true; // Запрещаем менять
+            select.dispatchEvent(new Event('change'));
+        }
+    });
+}
+
+// МОДЕРНИЗИРОВАННЫЙ КОНТРОЛЬ ДОСТУПА И ВИДИМОСТИ ВКЛАДОК
+// --- Найти и заменить функцию updateAuthVisibility в app.js ---
 function updateAuthVisibility() {
     const isAuth = sessionStorage.getItem('kamagonAuth') === 'true';
     const activeUser = sessionStorage.getItem('kamagonAuthUser');
+    const role = sessionStorage.getItem('kamagonAuthRole');
+    const userYard = sessionStorage.getItem('kamagonAuthYard');
     const loginBtn = document.getElementById('loginBtn');
     
-    // Скрываем или показываем все защищенные элементы
+    // 1. Базово переключаем элементы с классом auth-hidden
     document.querySelectorAll('.auth-hidden').forEach(el => {
-        if (isAuth) {
-            el.classList.remove('auth-hidden');
-        }
+        if (isAuth) el.classList.remove('auth-hidden');
     });
 
-    // Вместо ключика показываем имя пользователя и добавляем функцию выхода
+    // Хватай все элементы интерфейса для разграничения прав
+    const tabRaw = document.getElementById('tabRaw');
+    const tabDetailed = document.getElementById('tabDetailed');
+    const tabEvents = document.getElementById('tabEvents');
+    const tabKamag = document.getElementById('tabKamag');
+    const tabFact = document.getElementById('tabFact');
+    const tabRdu = document.getElementById('tabRdu');
+
+    const fileInputLabel = document.getElementById('fileInputLabel');
+    const saveGoogleBtn = document.getElementById('saveGoogleBtn');
+    const saveAllGoogleBtn = document.getElementById('saveAllGoogleBtn');
+    const tabCompare = document.getElementById('tabCompare');
+
+    if (isAuth) {
+        if (isAuth) {
+            if (role === 'РДУ') {
+                // РДУ видит три вкладки: Розрахунок, Введення РДУ и Звірка
+                if (tabRaw) tabRaw.style.display = 'none';
+                if (tabDetailed) tabDetailed.style.display = 'none';
+                if (tabEvents) tabEvents.style.display = 'none';
+                if (tabFact) tabFact.style.display = 'none';
+                
+                if (tabKamag) tabKamag.style.display = 'block';
+                if (tabRdu) tabRdu.style.display = 'block';
+                if (tabCompare) tabCompare.style.display = 'block';
+
+                if (fileInputLabel) fileInputLabel.style.display = 'none';
+                if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
+                if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'none';
+
+                const activeTab = document.querySelector('.tabs .tab-btn.active');
+                if (activeTab && (activeTab === tabRaw || activeTab === tabDetailed || activeTab === tabEvents || activeTab === tabFact)) {
+                    if (tabKamag) tabKamag.click();
+                }
+                enforceUserYardLock(userYard);
+            } else {
+                // Админ видит абсолютно всё
+                if (tabRaw) tabRaw.style.display = 'block';
+                if (tabDetailed) tabDetailed.style.display = 'block';
+                if (tabEvents) tabEvents.style.display = 'block';
+                if (tabKamag) tabKamag.style.display = 'block';
+                if (tabFact) tabFact.style.display = 'block';
+                if (tabRdu) tabRdu.style.display = (role === 'Адмін') ? 'block' : 'none';
+                if (tabCompare) tabCompare.style.display = 'block';
+
+                if (fileInputLabel) fileInputLabel.style.display = 'flex';
+                if (saveGoogleBtn) saveGoogleBtn.style.display = 'inline-flex';
+                if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'inline-flex';
+
+                ['kamagYardSelect', 'factYardSelect', 'compareYardSelect'].forEach(id => {
+                    const select = document.getElementById(id);
+                    if (select) select.disabled = false;
+                });
+            }
+        }
+    } else {
+        // === ПРАВА ДЛЯ НЕАВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ГОСТЬ) ===
+        // Гость видит только вкладку "Розрахунок" (активна по умолчанию)
+        if (fileInputLabel) fileInputLabel.style.display = 'none';
+        if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
+        if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'none';
+    }
+
+    // Обновляем плашку профиля в правом углу
     if (isAuth && loginBtn) {
-        loginBtn.innerHTML = `${activeUser}`; 
+        loginBtn.innerHTML = `${activeUser} (${role})`; 
         loginBtn.title = "Вийти з акаунту";
         
-        // Меняем действие кнопки на логаут
         loginBtn.removeEventListener('click', checkAuth);
         loginBtn.onclick = () => {
             if (confirm("Вийти з акаунту?")) {
-                sessionStorage.removeItem('kamagonAuth');
-                sessionStorage.removeItem('kamagonAuthUser');
-                location.reload(); // Перезагружаем страницу для очистки интерфейса
+                sessionStorage.clear();
+                location.reload();
             }
         };
     }
 }
 
-// Привязываем вызов модалки к ключику (для неавторизованных)
 document.getElementById('loginBtn').addEventListener('click', checkAuth);
-
-// Проверяем статус при загрузке
 document.addEventListener('DOMContentLoaded', updateAuthVisibility);
 
 // Константа с индексами (числа со скрина МИНУС 1)
@@ -109,7 +190,6 @@ const colIdx = {
     }
 };
 
-// Функция для безопасного чтения дат из Excel
 function parseExcelDate(val) {
     if (!val) return null;
     if (typeof val === 'number') return new Date(Math.round((val - 25569) * 86400 * 1000));
@@ -117,7 +197,6 @@ function parseExcelDate(val) {
     return isNaN(d.getTime()) ? null : d;
 }
 
-// Хелпер для быстрого получения дня недели из строки формата DD.MM.YYYY
 function getDayOfWeekFromDotStr(dateStr) {
     if (!dateStr || !dateStr.includes('.')) return "";
     const [dd, mm, yyyy] = dateStr.split('.');
@@ -126,7 +205,6 @@ function getDayOfWeekFromDotStr(dateStr) {
     return isNaN(d.getTime()) ? "" : dayNamesShort[d.getDay()];
 }
 
-// Функция получения текущего отфильтрованного списка дат на экране расчета
 function getFilteredDays(yard) {
     const startStr = document.getElementById('kamagStartDate').value;
     const endStr = document.getElementById('kamagEndDate').value;
@@ -156,7 +234,7 @@ async function loadRouteSchemas() {
     const label = document.getElementById('fileInputLabel');
     label.classList.add('disabled');
     fileInput.disabled = true;
-    document.getElementById('fileStatus').innerText = "Завантаження даних з хмари...";
+    document.getElementById('fileStatus').innerText = "Завантаження даних...";
 
     try {
         const response = await fetch(DICT_SCRIPT_URL);
@@ -176,8 +254,8 @@ async function loadRouteSchemas() {
         label.classList.remove('disabled');
         fileInput.disabled = false;
         
-        if (document.getElementById('fileStatus').innerText === "Завантаження даних з хмари...") {
-            document.getElementById('fileStatus').innerText = "Система готова до роботи.";
+        if (document.getElementById('fileStatus').innerText === "Завантаження даних...") {
+            document.getElementById('fileStatus').innerText = "Готово.";
         }
     }
 }
@@ -195,7 +273,15 @@ async function loadSavedYardsList() {
                 opt.value = opt.textContent = y;
                 yardSelect.appendChild(opt);
             });
-            document.getElementById('fileStatus').innerText = "Список збережених автодворів підвантажено.";
+            document.getElementById('fileStatus').innerText = "Готово.";
+
+            // ЗАЩИТА РДУ ПОСЛЕ ЗАГРУЗКИ СПИСКА ИЗ БАЗЫ
+            const isAuth = sessionStorage.getItem('kamagonAuth') === 'true';
+            const role = sessionStorage.getItem('kamagonAuthRole');
+            const userYard = sessionStorage.getItem('kamagonAuthYard');
+            if (isAuth && role === 'РДУ') {
+                enforceUserYardLock(userYard);
+            }
         }
     } catch (e) {
         console.error("Помилка завантаження списку автодворів:", e);
@@ -213,9 +299,7 @@ document.getElementById('loadGoogleYardBtn').addEventListener('click', async () 
         const data = await response.json();
 
         if (data.savedRows && data.savedRows.length > 0) {
-            // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Очищаем сирые события, переключая систему в режим БД
             yardEvents = []; 
-            
             fleetActiveState[yard] = {};
             totalOpsData[yard] = {};
 
@@ -331,7 +415,6 @@ class Schedule {
     }
 }
 
-// Глобальные массивы
 let allSchedules = [];
 let filteredAllSchedules = [];
 let detailedSchedules = [];
@@ -500,7 +583,6 @@ function initTable() {
 
 function renderChunk() {
     if (renderedCount >= filteredAllSchedules.length) return;
-
     const tbody = document.getElementById('tableBody');
     if (!tbody) return;
 
@@ -539,13 +621,13 @@ function formatTime(val) {
     return "—"; 
 }
 
-document.getElementById('togglePtBtn').addEventListener('click', function() {
+/*document.getElementById('togglePtBtn').addEventListener('click', function() {
     const container = document.getElementById('tableContainerRaw');
     if (container) {
         container.classList.toggle('hide-pt');
         this.classList.toggle('btn-active');
     }
-});
+});*/
 
 // Модалка неизвестных маршрутов
 const unknownModal = document.getElementById('unknownRoutesModal');
@@ -657,20 +739,34 @@ const tabRaw = document.getElementById('tabRaw');
 const tabDetailed = document.getElementById('tabDetailed');
 const tabEvents = document.getElementById('tabEvents');
 const tabKamag = document.getElementById('tabKamag'); 
+const tabFact = document.getElementById('tabFact'); 
+const tabRdu = document.getElementById('tabRdu'); // Вкладка РДУ
 
 const containerRaw = document.getElementById('tableContainerRaw');
 const containerDetailed = document.getElementById('tableContainerDetailed');
 const containerEvents = document.getElementById('tableContainerEvents');
 const containerKamag = document.getElementById('tableContainerKamag'); 
+const containerFact = document.getElementById('tableContainerFact'); 
+const containerRdu = document.getElementById('tableContainerRdu'); // Контейнер РДУ
 
 function switchTab(activeTabBtn, activeContainer) {
-    [tabRaw, tabDetailed, tabEvents, tabKamag].forEach(btn => btn.classList.remove('active'));
-    [containerRaw, containerDetailed, containerEvents, containerKamag].forEach(cont => cont.style.display = 'none');
+    const tabCompare = document.getElementById('tabCompare');
+    const containerCompare = document.getElementById('tableContainerCompare');
+    [tabRaw, tabDetailed, tabEvents, tabKamag, tabFact, tabRdu, tabCompare].forEach(btn => {
+        if (btn) btn.classList.remove('active');
+    });
+    [containerRaw, containerDetailed, containerEvents, containerKamag, containerFact, containerRdu, containerCompare].forEach(cont => {
+        if (cont) cont.style.display = 'none';
+    });
     
     activeTabBtn.classList.add('active');
-    activeContainer.style.display = activeContainer === containerKamag ? 'flex' : 'block';
+    
+    if (activeContainer === containerKamag || activeContainer === containerFact || activeContainer === containerRdu) {
+        activeContainer.style.display = 'flex';
+    } else {
+        activeContainer.style.display = 'block';
+    }
 
-    // Управляем видимостью через CSS-класс вместо инлайн-стилей
     const exportModeSelect = document.getElementById('exportModeSelect');
     if (exportModeSelect) {
         if (activeTabBtn === tabKamag) {
@@ -695,7 +791,6 @@ tabKamag.addEventListener('click', () => {
 const generateModal = document.getElementById('generateModal');
 let generatedDatesList = [];
 
-// Открытие модалки по кнопке "Порахуй"
 document.getElementById('generateDetailedBtn').addEventListener('click', () => {
     if (allSchedules.length === 0) return alert("Спочатку завантажте вихідні графіки!");
 
@@ -720,7 +815,6 @@ document.getElementById('generateDetailedBtn').addEventListener('click', () => {
 
 document.getElementById('closeGenerateModal').addEventListener('click', () => { generateModal.style.display = 'none'; });
 
-// Кнопка расчета ВНУТРИ модалки
 document.getElementById('confirmGenerateBtn').addEventListener('click', () => {
     const yardOpt = document.getElementById('genYardSelect').value;
     const dStart = new Date(document.getElementById('genDateStart').value);
@@ -1047,7 +1141,6 @@ function calculateUnloadingTimes() {
     });
 }
 
-// Сортировка
 let sortState = { key: null, asc: true };
 document.getElementById('tableContainerDetailed').addEventListener('click', function(e) {
     if (e.target.tagName === 'TH' && e.target.hasAttribute('data-sort')) {
@@ -1082,7 +1175,6 @@ function sortDetailedSchedules(key, thElement) {
     Array.from(tr.children).forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
     thElement.classList.add(asc ? 'sort-asc' : 'sort-desc');
 
-    // ИСПРАВЛЕНО: Вместо "призрачной" функции вызываем реальную синхронизацию фильтров
     filteredDetailedSchedules = filterDataArray('tableContainerDetailed', detailedSchedules, getDetailedValues);
     detailedRenderedCount = 0;
     document.getElementById('detailedTableBody').innerHTML = "";
@@ -1090,7 +1182,6 @@ function sortDetailedSchedules(key, thElement) {
     document.getElementById('tableContainerDetailed').scrollTop = 0; 
 }
 
-// ГЕНЕРАЦИЯ СОБЫТИЙ С ПРОВЕРКОЙ НА ПРИСУТСТВИЕ ФЛАГОВ
 function generateYardEvents() {
     yardEvents = [];
     
@@ -1145,10 +1236,8 @@ function generateYardEvents() {
                 const parts = item.timeUnloadStart.split(' ');
                 addEvent(item.yardB, item.nodeB, 3, "3. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
             }
-            
             if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
                 const parts = item.timeUnloadEnd.split(' ');
-                // ИСПРАВЛЕНО: Исправлен критический вылет из-за nodeB вместо item.nodeB
                 addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
             }
         }
@@ -1205,7 +1294,6 @@ function renderEventsChunk() {
 }
 
 function calculateFleetRequirements() {
-    // ИЗМЕНЕНИЕ: Пересчитываем базовые операции из yardEvents ТОЛЬКО если они физически есть в памяти (Режим Excel)
     if (yardEvents && yardEvents.length > 0) {
         totalOpsData = {}; 
         yardEvents.forEach(ev => {
@@ -1216,13 +1304,9 @@ function calculateFleetRequirements() {
         });
     }
 
-    // ИЗМЕНЕНИЕ: Жесткая защита. Если данных нет вообще нигде (ни в событиях, ни загруженных из БД) — прерываемся, чтобы не ломать интерфейс
-    if (Object.keys(totalOpsData).length === 0) {
-        return;
-    }
+    if (Object.keys(totalOpsData).length === 0) return;
 
     fleetActiveState = {}; 
-    const virtualType = document.querySelector('input[name="virtualFleetType"]:checked')?.value || 'kamag';
 
     const yardNorms = {};
     for(let node in yardDictionary) {
@@ -1230,27 +1314,27 @@ function calculateFleetRequirements() {
         if(!yardNorms[y]) yardNorms[y] = { k: yardDictionary[node].normKamag || 12, m: yardDictionary[node].normMan || 6 };
     }
 
-    // Распределяем и вычисляем дефицит
     for (let yard in totalOpsData) {
         fleetActiveState[yard] = {};
         const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
         const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
-        const normK = yardNorms[yard] ? yardNorms[yard].k : 12;
-        const normM = yardNorms[yard] ? yardNorms[yard].m : 6;
+        const fontK = yardNorms[yard] ? yardNorms[yard].k : 12;
+        const fontM = yardNorms[yard] ? yardNorms[yard].m : 6;
 
+        let yardVirtualType = availK >= availM ? 'kamag' : 'man';
         let maxExtraK = 0;
         let maxExtraM = 0;
 
         for (let day in totalOpsData[yard]) {
             for (let h = 0; h < 24; h++) {
                 let ops = totalOpsData[yard][day][h];
-                let cap = (availK * normK) + (availM * normM);
+                let cap = (availK * fontK) + (availM * fontM);
                 if (ops > cap) {
-                    if (virtualType === 'kamag') {
-                        let extra = Math.ceil((ops - cap) / normK);
+                    if (yardVirtualType === 'kamag') {
+                        let extra = Math.ceil((ops - cap) / fontK);
                         if (extra > maxExtraK) maxExtraK = extra;
                     } else {
-                        let extra = Math.ceil((ops - cap) / normM);
+                        let extra = Math.ceil((ops - cap) / fontM);
                         if (extra > maxExtraM) maxExtraM = extra;
                     }
                 }
@@ -1268,39 +1352,37 @@ function calculateFleetRequirements() {
             
             for (let h = 0; h < 24; h++) {
                 let neededOps = totalOpsData[yard][day][h];
-                
                 let assignedK = 0;
                 while (neededOps > 0 && assignedK < availK) {
                     fleetActiveState[yard][day][h].kamag[assignedK] = 1;
                     assignedK++;
-                    neededOps -= normK;
+                    neededOps -= fontK;
                 }
                 
                 let assignedM = 0;
                 while (neededOps > 0 && assignedM < availM) {
                     fleetActiveState[yard][day][h].man[assignedM] = 1;
                     assignedM++;
-                    neededOps -= normM;
+                    neededOps -= fontM;
                 }
 
-                if (virtualType === 'kamag') {
+                if (yardVirtualType === 'kamag') {
                     while (neededOps > 0 && assignedK < totalK) {
                         fleetActiveState[yard][day][h].kamag[assignedK] = 1;
                         assignedK++;
-                        neededOps -= normK;
+                        neededOps -= fontK;
                     }
                 } else {
                     while (neededOps > 0 && assignedM < totalM) {
                         fleetActiveState[yard][day][h].man[assignedM] = 1;
                         assignedM++;
-                        neededOps -= normM;
+                        neededOps -= fontM;
                     }
                 }
             }
         }
     }
 
-    // Фотографируем автоматический расчет в systemFleetState
     for (let y in totalOpsData) {
         systemFleetState[y] = {};
         for (let day in totalOpsData[y]) {
@@ -1323,6 +1405,14 @@ function calculateFleetRequirements() {
     });
     if (currentVal && totalOpsData[currentVal]) yardSelect.value = currentVal;
 
+    // СТРАХОВОЧНЫЙ СЛОТ КУПИРОВАНИЯ ДЛЯ РДУ ПОСЛЕ ПЕРЕСЧЕТА МАТРИЦЫ
+    const isAuth = sessionStorage.getItem('kamagonAuth') === 'true';
+    const role = sessionStorage.getItem('kamagonAuthRole');
+    const userYard = sessionStorage.getItem('kamagonAuthYard');
+    if (isAuth && role === 'РДУ') {
+        enforceUserYardLock(userYard);
+    }
+
     renderKamagTable();
 }
 
@@ -1335,7 +1425,6 @@ function renderKamagTable() {
         return;
     }
 
-    // Сохраняем положение скролла перед рендерингом для исключения прыжков экрана
     const savedScrollLeft = wrapper ? wrapper.scrollLeft : 0;
     const savedScrollTop = wrapper ? wrapper.scrollTop : 0;
 
@@ -1363,7 +1452,6 @@ function renderKamagTable() {
 
     function generateMatrixHTML(title, rowHeaders, dataProvider, includeCharts = false) {
         let html = `<h3 style="margin: 5px 0 5px 0; color: #334155; border-left: 4px solid #ffaa00; padding-left: 10px;">${title}</h3><table><thead><tr><th style="min-width: 120px;"></th>`;
-        
         const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
         
         daysOfWeek.forEach(d => {
@@ -1378,43 +1466,46 @@ function renderKamagTable() {
         
         let isFleet = title.includes("Флот") || title.includes("Машини");
         let unit = isFleet ? "год" : "шт"; 
-        
-        let totalTooltip = isFleet ? "Сумарна кількість годин роботи за обраний період" : "Загальна кількість операцій за обраний період";
-        let sigmaTooltip = isFleet ? "Годин роботи за добу" : "Кількість за добу";
-        let rowHeaderLabel = isFleet ? "ТЗ / Години" : "Операції / Години";
-
-        html += `<th title="${totalTooltip}" style="text-align: center; line-height: 1.2; cursor: help;">Всього,<br>${unit}</th></tr><tr><th style="font-size: 10px;">${rowHeaderLabel}</th>`;
+        html += `<th style="text-align: center; line-height: 1.2;">Всього,<br>${unit}</th></tr><tr><th style="font-size: 10px;">${isFleet ? 'ТЗ / Години' : 'Операції / Години'}</th>`;
         
         daysOfWeek.forEach(d => {
             for (let i = 0; i < 24; i++) {
-                let borderStyle = i === 0 ? "border-left: 2px solid #6c757d;" : "";
-                html += `<th class="kamag-header-vertical" style="${borderStyle}">${i}:00</th>`;
+                html += `<th class="kamag-header-vertical" style="${i === 0 ? 'border-left: 2px solid #6c757d;' : ''}">${i}:00</th>`;
             }
-            html += `<th title="${sigmaTooltip}" style="text-align: center; font-weight: bold; font-size: 10px; background-color: #dee2e6; border-right: 2px solid #6c757d; min-width: 40px; cursor: help;">Σ, ${unit}</th>`;
+            html += `<th style="text-align: center; font-weight: bold; font-size: 10px; background-color: #dee2e6; border-right: 2px solid #6c757d; min-width: 40px;">Σ</th>`;
         });
         html += `<th></th></tr></thead><tbody>`;
 
         rowHeaders.forEach(rowName => {
-            let isKamag = rowName.startsWith("Kamag");
-            let dataType = isKamag ? "kamag" : "man";
-            let match = rowName.match(/\d+/);
-            let idx = match ? parseInt(match[0]) - 1 : 0;
+            let isVehicleRow = rowName.startsWith("Kamag") || rowName.startsWith("Маневровий");
+            let rowClass = "";
+            if (rowName === "Задіяно фіз. КАМАГ") rowClass = ' class="fleet-summary-top"';
+            else if (rowName === "Задіяно вірт. МАН") rowClass = ' class="fleet-summary-bottom"';
+            else if (rowName.startsWith("Задіяно")) rowClass = ' class="fleet-summary-row"';
 
-            if (isFleet) {
-                html += `<tr><td class="fleet-row-header" data-yard="${yard}" data-type="${dataType}" data-index="${idx}" style="font-weight: bold; font-size: 11px; white-space: normal; cursor: pointer;" title="Клікніть, щоб скинути всі одинички цього рядка за обраний період">${rowName}</td>`;
+            if (isFleet && isVehicleRow) {
+                let isKamag = rowName.startsWith("Kamag");
+                let dataType = isKamag ? "kamag" : "man";
+                let match = rowName.match(/\d+/);
+                let idx = match ? parseInt(match[0]) - 1 : 0;
+                html += `<tr${rowClass}><td class="fleet-row-header" data-yard="${yard}" data-type="${dataType}" data-index="${idx}" style="font-weight: bold; font-size: 11px; cursor: pointer;">${rowName}</td>`;
             } else {
-                html += `<tr><td style="font-weight: bold; font-size: 11px; white-space: normal;">${rowName}</td>`;
+                html += `<tr${rowClass}><td style="font-weight: bold; font-size: 11px;">${rowName}</td>`;
             }
 
             let totalRowSum = 0;
-            
             daysOfWeek.forEach(d => {
                 let dailySum = 0;
                 for (let h = 0; h < 24; h++) {
                     let val = dataProvider(rowName, d, h);
                     let borderStyle = h === 0 ? "border-left: 2px solid #6c757d;" : "";
                     
-                    if (isFleet) {
+                    if (isFleet && isVehicleRow) {
+                        let isKamag = rowName.startsWith("Kamag");
+                        let dataType = isKamag ? "kamag" : "man";
+                        let match = rowName.match(/\d+/);
+                        let idx = match ? parseInt(match[0]) - 1 : 0;
+
                         let isActive = val > 0;
                         let isManual = val === 2;
                         let cellClass = "kamag-cell kamag-editable";
@@ -1430,14 +1521,12 @@ function renderKamagTable() {
                                 else cellClass += " kamag-active";
                             }
                         }
-
-                        html += `<td class="${cellClass}" style="${borderStyle} cursor:pointer;" data-yard="${yard}" data-day="${d}" data-hour="${h}" data-type="${dataType}" data-index="${idx}">${isActive ? 1 : ''}</td>`;
+                        html += `<td class="${cellClass}" style="${borderStyle}" data-yard="${yard}" data-day="${d}" data-hour="${h}" data-type="${dataType}" data-index="${idx}">${isActive ? 1 : ''}</td>`;
                         if (isActive) { dailySum++; totalRowSum++; }
                     } else {
-                        let cellStyle = "background-color: #fff9c4; font-weight: bold;";
                         if (val !== 0 && val !== "") {
-                            html += `<td class="kamag-cell" style="${borderStyle} ${cellStyle}">${val}</td>`;
-                            let numVal = typeof val === 'number' ? val : (parseInt(val.replace(/<[^>]*>/g, ''), 10) || 0);
+                            html += `<td class="kamag-cell" style="${borderStyle} background-color: #fff9c4; font-weight: bold;">${val}</td>`;
+                            let numVal = typeof val === 'number' ? val : (parseInt(String(val).replace(/<[^>]*>/g, ''), 10) || 0);
                             dailySum += numVal; totalRowSum += numVal;
                         } else {
                             html += `<td class="kamag-cell" style="${borderStyle}"></td>`;
@@ -1462,35 +1551,32 @@ function renderKamagTable() {
 
     const hideVirtual = document.getElementById('hideVirtualFleet').checked;
     const rowHeaders = [];
-    
     for(let i=1; i<=availK; i++) rowHeaders.push(`Kamag ${i}`);
+    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
+
     if (!hideVirtual) {
         for(let i=availK+1; i<=totalK; i++) rowHeaders.push(`Kamag ${i} (дод.)`);
-    }
-
-    for(let i=1; i<=availM; i++) rowHeaders.push(`Маневровий ${i}`);
-    if (!hideVirtual) {
         for(let i=availM+1; i<=totalM; i++) rowHeaders.push(`Маневровий ${i} (дод.)`);
     }
+
+    rowHeaders.push("Задіяно фіз. КАМАГ", "Задіяно вірт. КАМАГ", "Задіяно фіз. МАН", "Задіяно вірт. МАН");
     
     let fleetHTML = generateMatrixHTML(`Флот`, rowHeaders, (row, day, hour) => {
         if (!fleetActiveState[yard][day] || !fleetActiveState[yard][day][hour]) return 0;
+        if (row.startsWith("Задіяно")) {
+            const st = fleetActiveState[yard][day][hour];
+            if (row === "Задіяно фіз. КАМАГ") return st.kamag.slice(0, availK).filter(Boolean).length || "";
+            if (row === "Задіяно вірт. КАМАГ") return st.kamag.slice(availK).filter(Boolean).length || "";
+            if (row === "Задіяно фіз. МАН") return st.man.slice(0, availM).filter(Boolean).length || "";
+            if (row === "Задіяно вірт. МАН") return st.man.slice(availM).filter(Boolean).length || "";
+        }
         const isKamag = row.startsWith("Kamag");
         const match = row.match(/\d+/);
         const idx = match ? parseInt(match[0]) - 1 : 0;
-        const state = fleetActiveState[yard][day][hour];
-        return isKamag ? state.kamag[idx] : state.man[idx];
+        return isKamag ? fleetActiveState[yard][day][hour].kamag[idx] : fleetActiveState[yard][day][hour].man[idx];
     });
 
-    const opsHTML = generateMatrixHTML(`Операції`, [
-        "Всього операцій", 
-        "Задіяно фіз. КАМАГ", 
-        "Задіяно вірт. КАМАГ", 
-        "Задіяно фіз. МАН", 
-        "Задіяно вірт. МАН", 
-        "Непокриті (фіз. флот)", 
-        "Непокриті (залишок)"
-    ], (row, day, hour) => {
+    let opsHTML = generateMatrixHTML(`Операції`, ["Всього операцій", "Непокриті (фіз. флот)", "Непокриті (залишок)"], (row, day, hour) => {
         const totalOps = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][hour] : 0;
         if (row === "Всього операцій") return totalOps;
 
@@ -1503,28 +1589,20 @@ function renderKamagTable() {
             activeVirtM = st.man.slice(availM).filter(Boolean).length;
         }
 
-        if (row === "Задіяно фіз. КАМАГ") return activePhysK || "";
-        if (row === "Задіяно вірт. КАМАГ") return activeVirtK || "";
-        if (row === "Задіяно фіз. МАН") return activePhysM || "";
-        if (row === "Задіяно вірт. МАН") return activeVirtM || "";
-
-        const capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
-        const activeTotalK = hideVirtual ? activePhysK : (activePhysK + activeVirtK);
-        const activeTotalM = hideVirtual ? activePhysM : (activePhysM + activeVirtM);
-        const capTotal = (activeTotalK * yardNorms.k) + (activeTotalM * yardNorms.m);
-
         if (row === "Непокриті (фіз. флот)") {
+            const capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
             const uncoveredPhys = Math.max(0, totalOps - capPhysical);
             return uncoveredPhys > 0 ? `<span class="uncovered-alert">${uncoveredPhys}</span>` : '';
         } else {
+            const activeTotalK = hideVirtual ? activePhysK : (activePhysK + activeVirtK);
+            const activeTotalM = hideVirtual ? activePhysM : (activePhysM + activeVirtM);
+            const capTotal = (activeTotalK * yardNorms.k) + (activeTotalM * yardNorms.m);
             const uncoveredAbs = Math.max(0, totalOps - capTotal);
             return uncoveredAbs > 0 ? `<span class="uncovered-alert">${uncoveredAbs}</span>` : '';
         }
     }, true);
 
     wrapper.innerHTML = fleetHTML + "<div style='height: 10px;'></div>" + opsHTML;
-
-    // Восстановление позиции прокрутки для плавности работы
     wrapper.scrollLeft = savedScrollLeft;
     wrapper.scrollTop = savedScrollTop;
 
@@ -1535,7 +1613,6 @@ function renderKamagTable() {
         const ctx = document.getElementById(`chart_${index}`);
         if (!ctx) return;
         const parentDiv = ctx.parentElement;
-        
         ctx.width = parentDiv.clientWidth; ctx.height = 135; 
 
         const chartLabels = [], opsData = [], capacityData = [];
@@ -1547,9 +1624,7 @@ function renderKamagTable() {
                 const st = fleetActiveState[yard][d][h];
                 const activeK = hideVirtual ? st.kamag.slice(0, availK).filter(Boolean).length : st.kamag.filter(Boolean).length;
                 const activeM = hideVirtual ? st.man.slice(0, availM).filter(Boolean).length : st.man.filter(Boolean).length;
-                
-                cap += activeK * yardNorms.k;
-                cap += activeM * yardNorms.m;
+                cap += activeK * yardNorms.k + activeM * yardNorms.m;
             }
             capacityData.push(cap);
         }
@@ -1561,25 +1636,11 @@ function renderKamagTable() {
                 { type: 'bar', label: 'Операції', data: opsData, backgroundColor: 'rgba(255, 193, 7, 0.7)', borderColor: '#ffaa00', borderWidth: 1, borderRadius: 2, yAxisID: 'y' }
             ]},
             options: { 
-                animation: false, 
-                responsive: false, 
-                maintainAspectRatio: false, 
+                animation: false, responsive: false, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false }, 
-                scales: { 
-                    x: { display: false }, 
-                    y: { type: 'linear', display: false, beginAtZero: true } 
-                }, 
+                scales: { x: { display: false }, y: { type: 'linear', display: false, beginAtZero: true } }, 
                 plugins: { 
-                    legend: { 
-                        display: true,
-                        position: 'bottom',
-                        align: 'center',
-                        labels: {
-                            boxWidth: 12,      
-                            font: { size: 10 }, 
-                            padding: 4         
-                        }
-                    }, 
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 }, padding: 4 } }, 
                     tooltip: { callbacks: { title: (items) => `${d} ${items[0].label}`, label: (item) => `${item.dataset.label}: ${item.raw}` } } 
                 }, 
                 layout: { padding: 0 } 
@@ -1590,9 +1651,7 @@ function renderKamagTable() {
 
 document.getElementById('kamagYardSelect').addEventListener('change', renderKamagTable);
 
-// КЛИКИ ПО МАТРИЦЕ ФЛОТА (ДЕЛЕГИРОВАНИЕ)
 document.getElementById('kamagTableWrapper').addEventListener('click', function(e) {
-    // Снятие единиц кликом на имя ТЗ по отфильтрованному периоду
     if (e.target.classList.contains('fleet-row-header')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
         const header = e.target;
@@ -1610,12 +1669,10 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
                 }
             }
         });
-
         renderKamagTable();
         return;
     }
 
-    // Клик по ячейке с единичкой
     if (e.target.classList.contains('kamag-editable')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
         const cell = e.target;
@@ -1631,13 +1688,11 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
         if (currentState > 0) {
             newState = 0; 
         } else {
-            // Умная проверка: была ли ячейка изначально создана системой
             const wasSystemActive = systemFleetState[yard] && 
                                     systemFleetState[yard][day] && 
                                     systemFleetState[yard][day][hour] && 
                                     systemFleetState[yard][day][hour][type] && 
                                     systemFleetState[yard][day][hour][type][idx] === 1;
-            
             newState = wasSystemActive ? 1 : 2; 
         }
         
@@ -1708,69 +1763,30 @@ function assignKamagsToEvents() {
 }
 
 function getRawValues(item) {
-    const vals = [
-        item.route, item.deadline,
-        ...(item.days.map(d => d ? "1" : "0")),
-        item.pointNames[0], item.allTimes[0] || "", item.allTimes[1] || ""
-    ];
-    for(let j=1; j<=10; j++) {
-        vals.push(item.pointNames[j], item.allTimes[j*2] || "", item.allTimes[j*2 + 1] || "");
-    }
-    vals.push(
-        item.pointNames[11], item.allTimes[22] || "", item.allTimes[23] || "",
-        item.deliveryType, item.vehicleType, item.schema, item.loadFormat, item.code, item.moveType
-    );
+    const vals = [item.route, item.deadline, ...(item.days.map(d => d ? "1" : "0")), item.pointNames[0], item.allTimes[0] || "", item.allTimes[1] || ""];
+    for(let j=1; j<=10; j++) vals.push(item.pointNames[j], item.allTimes[j*2] || "", item.allTimes[j*2 + 1] || "");
+    vals.push(item.pointNames[11], item.allTimes[22] || "", item.allTimes[23] || "", item.deliveryType, item.vehicleType, item.schema, item.loadFormat, item.code, item.moveType);
     return vals;
 }
 
 function getDetailedValues(item) {
-    return [
-        item.originalRoute, 
-        item.originalCode, 
-        item.day, 
-        getDayOfWeekFromDotStr(item.day), 
-        item.miniSchema, 
-        item.containerType,
-        item.yardA, 
-        item.timePlacementA || "—", 
-        item.nodeA, 
-        item.timeDepartureA,
-        item.yardB, 
-        item.nodeB, 
-        item.timeArrivalB,
-        item.timeUnloadStart, 
-        item.timeUnloadEnd, 
-        item.vehicle
-    ];
+    return [item.originalRoute, item.originalCode, item.day, getDayOfWeekFromDotStr(item.day), item.miniSchema, item.containerType, item.yardA, item.timePlacementA || "—", item.nodeA, item.timeDepartureA, item.yardB, item.nodeB, item.timeArrivalB, item.timeUnloadStart, item.timeUnloadEnd, item.vehicle];
 }
 
 function getEventsValues(ev) {
-    return [
-        ev.yard, 
-        ev.code, 
-        ev.event, 
-        ev.day, 
-        getDayOfWeekFromDotStr(ev.day), 
-        ev.time
-    ];
+    return [ev.yard, ev.code, ev.event, ev.day, getDayOfWeekFromDotStr(ev.day), ev.time];
 }
 
 function filterDataArray(containerId, dataArray, valuesExtractor) {
     const inputs = document.querySelectorAll(`#${containerId} .filter-input`);
     const filters = [];
-    
     inputs.forEach(input => {
         const val = input.value.trim().toLowerCase();
-        if (val) {
-            filters.push({ col: parseInt(input.getAttribute('data-col')), val: val });
-        }
+        if (val) filters.push({ col: parseInt(input.getAttribute('data-col')), val: val });
     });
-
     if (filters.length === 0) return [...dataArray];
-
     return dataArray.filter(item => {
         const rowVals = valuesExtractor(item);
-        
         return filters.every(f => {
             const cellStr = String(rowVals[f.col] || "").toLowerCase();
             const searchTerms = f.val.split(',').map(s => s.trim()).filter(Boolean);
@@ -1785,109 +1801,77 @@ document.addEventListener('input', function(e) {
         clearTimeout(filterTimeout);
         filterTimeout = setTimeout(() => {
             const container = e.target.closest('.table-container');
-            if (!container) return; // Защита от вылетов
+            if (!container) return; 
             if (container.id === 'tableContainerRaw') {
                 filteredAllSchedules = filterDataArray('tableContainerRaw', allSchedules, getRawValues);
-                renderedCount = 0;
-                document.getElementById('tableBody').innerHTML = "";
-                renderChunk();
+                renderedCount = 0; document.getElementById('tableBody').innerHTML = ""; renderChunk();
             } else if (container.id === 'tableContainerDetailed') {
                 filteredDetailedSchedules = filterDataArray('tableContainerDetailed', detailedSchedules, getDetailedValues);
-                detailedRenderedCount = 0;
-                document.getElementById('detailedTableBody').innerHTML = "";
-                renderDetailedChunk();
+                detailedRenderedCount = 0; document.getElementById('detailedTableBody').innerHTML = ""; renderDetailedChunk();
             } else if (container.id === 'tableContainerEvents') {
                 filteredYardEvents = filterDataArray('tableContainerEvents', yardEvents, getEventsValues);
-                eventsRenderedCount = 0;
-                document.getElementById('eventsTableBody').innerHTML = "";
-                renderEventsChunk();
+                eventsRenderedCount = 0; document.getElementById('eventsTableBody').innerHTML = ""; renderEventsChunk();
             }
         }, 300); 
     }
 });
 
-// МОДЕРНИЗИРОВАННЫЙ ЭКСПОРТ В EXCEL (ПОВНІСТЮ ВИПРАВЛЕНИЙ)
 document.getElementById('exportExcelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('exportExcelBtn');
     const originalText = btn.innerText;
-    btn.innerText = "⏳ Формування...";
-    btn.disabled = true;
+    btn.innerText = "⏳ Формування..."; btn.disabled = true;
 
     try {
         const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Звіт');
-        
         if (tabRaw.classList.contains('active')) {
             const headers = ["Маршрут", "Дедлайн", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд", "Початкова", "Приїзд", "Виїзд"];
             for(let i=1; i<=10; i++) headers.push(`П.Т. №${i}`, "Приїзд", "Виїзд");
             headers.push("Кінцева", "Приїзд", "Вивільнення", "Тип доставки", "Тип ТЗ", "Схема БДФ", "Формат", "Код", "Тип переміщення");
-            
-            sheet.addRow(headers);
+            const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
             filteredAllSchedules.forEach(item => sheet.addRow(getRawValues(item)));
-
         } else if (tabDetailed.classList.contains('active')) {
             const headers = ["Маршрут", "Код", "День", "День тижня", "Схема", "Тип", "Автодвір А", "Постановка", "Точка А", "Виїзд", "Автодвір Б", "Точка Б", "Приїзд", "Постановка (вивант.)", "Кінець вивант.", "Тип ТЗ"];
-            sheet.addRow(headers);
-            filteredDetailedSchedules.forEach((item) => {
-                sheet.addRow(getDetailedValues(item));
-            });
-
+            const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
+            filteredDetailedSchedules.forEach((item) => sheet.addRow(getDetailedValues(item)));
         } else if (tabEvents.classList.contains('active')) {
             const headers = ["Автодвір", "Код", "Подія", "День", "День тижня", "Час"];
-            sheet.addRow(headers);
-            filteredYardEvents.forEach((ev) => {
-                sheet.addRow(getEventsValues(ev));
-            });
-
+            const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
+            filteredYardEvents.forEach((ev) => sheet.addRow(getEventsValues(ev)));
         } else if (tabKamag.classList.contains('active')) {
             const startStr = document.getElementById('kamagStartDate').value;
             const endStr = document.getElementById('kamagEndDate').value;
             const startDate = startStr ? new Date(startStr).setHours(0,0,0,0) : null;
             const endDate = endStr ? new Date(endStr).setHours(23,59,59,999) : null;
             const hideVirtual = document.getElementById('hideVirtualFleet').checked;
-
-            // Читаем режим экспорта из нашего нового верхнего дропдауна
             const exportMode = document.getElementById('exportModeSelect').value;
+            
             let yardsToExport = [];
-
             if (exportMode === 'current') {
                 const currentYard = document.getElementById('kamagYardSelect').value;
                 if (currentYard) yardsToExport.push(currentYard);
-            } else {
-                yardsToExport = Object.keys(totalOpsData).sort();
-            }
+            } else yardsToExport = Object.keys(totalOpsData).sort();
 
             if (yardsToExport.length === 0) {
                 alert("Немає розрахованих даних для експорту!");
-                btn.innerText = originalText;
-                btn.disabled = false;
-                return;
+                btn.innerText = originalText; btn.disabled = false; return;
             }
 
             const alignCenter = { vertical: 'middle', horizontal: 'center' };
             const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9ECEF' } };
             const fillSum = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F3F5' } };
-            
             const fillActive = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBBDEFB' } }; 
             const fillActiveVirtual = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0B2' } }; 
             const fillOps = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
             const fillUncovered = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEBEE' } }; 
             const fontUncovered = { bold: true, size: 9, color: { argb: 'FFD32F2F' } };
-
             const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
             const borderMedium = { style: 'medium', color: { argb: 'FF6C757D' } };
-
-            const getBorders = (isLeftEdge, isRightEdge) => ({
-                top: borderThin, bottom: borderThin,
-                left: isLeftEdge ? borderMedium : borderThin,
-                right: isRightEdge ? borderMedium : borderThin
-            });
+            const getBorders = (isLeftEdge, isRightEdge) => ({ top: borderThin, bottom: borderThin, left: isLeftEdge ? borderMedium : borderThin, right: isRightEdge ? borderMedium : borderThin });
 
             yardsToExport.forEach(yard => {
                 const sheetName = yard.substring(0, 31).replace(/[\\\?\*\[\]\/]/g, "");
                 const sheet = workbook.addWorksheet(sheetName);
 
-                // ІНІЦІАЛІЗАЦІЯ НОРМАТИВІВ ЦЬОГО АВТОДВОРУ (ПОВЕРНЕНО СЮДИ)
                 const yardNorms = { k: 12, m: 6 };
                 for(let node in yardDictionary) {
                     if(yardDictionary[node].yard === yard) {
@@ -1898,494 +1882,230 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 }
 
                 const days = Object.keys(totalOpsData[yard] || {}).sort((a, b) => {
-                    const [d1, m1, y1] = a.split('.');
-                    const [d2, m2, y2] = b.split('.');
+                    const [d1, m1, y1] = a.split('.'); const [d2, m2, y2] = b.split('.');
                     return new Date(y1, m1-1, d1) - new Date(y2, m2-1, d2);
                 }).filter(d => {
-                    const [dd, mm, yyyy] = d.split('.');
-                    const currentD = new Date(yyyy, mm-1, dd).getTime();
+                    const [dd, mm, yyyy] = d.split('.'); const currentD = new Date(yyyy, mm-1, dd).getTime();
                     if (startDate && currentD < startDate) return false;
                     if (endDate && currentD > endDate) return false;
                     return true;
                 });
 
                 if (days.length === 0) return; 
-
                 sheet.getColumn(1).width = 18; 
                 for (let i = 2; i <= 1 + 25 * days.length; i++) {
-                    sheet.getColumn(i).width = 3.5; 
-                    if ((i - 1) % 25 === 0) sheet.getColumn(i).width = 5; 
+                    sheet.getColumn(i).width = 3.5; if ((i - 1) % 25 === 0) sheet.getColumn(i).width = 5; 
                 }
-                sheet.getColumn(2 + 25 * days.length).width = 8; 
 
-                sheet.addRow([`Звіт по Флоту: ${yard}`]).font = { bold: true, size: 14 };
-                sheet.addRow([]);
-
-                const rowDays = sheet.addRow(["День"]);
-                rowDays.getCell(1).font = { bold: true };
-                rowDays.getCell(1).alignment = alignCenter;
+                sheet.addRow([`Звіт по Флоту: ${yard}`]).font = { bold: true, size: 14 }; sheet.addRow([]);
+                const rowDays = sheet.addRow(["День"]); rowDays.getCell(1).font = { bold: true }; rowDays.getCell(1).alignment = alignCenter;
 
                 const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-
                 days.forEach((d, index) => {
-                    const startCol = 2 + index * 25;
-                    const endCol = startCol + 24;
-                    sheet.mergeCells(3, startCol, 3, endCol); 
-                    
-                    const [dd, mm, yyyy] = d.split('.');
-                    const dateObj = new Date(yyyy, mm - 1, dd);
-                    const dayName = dayNamesShort[dateObj.getDay()];
-                    
-                    const cell = sheet.getCell(3, startCol);
-                    cell.value = `${d} (${dayName})`;
-                    cell.alignment = alignCenter;
-                    cell.font = { bold: true };
-                    cell.fill = fillHeader;
-                    cell.border = getBorders(true, true);
+                    const startCol = 2 + index * 25; const endCol = startCol + 24; sheet.mergeCells(3, startCol, 3, endCol); 
+                    const [dd, mm, yyyy] = d.split('.'); const dateObj = new Date(yyyy, mm - 1, dd);
+                    const cell = sheet.getCell(3, startCol); cell.value = `${d} (${dayNamesShort[dateObj.getDay()]})`;
+                    cell.alignment = alignCenter; cell.font = { bold: true }; cell.fill = fillHeader; cell.border = getBorders(true, true);
                 });
-                sheet.getCell(3, 2 + 25 * days.length).value = "Всього";
-                sheet.getCell(3, 2 + 25 * days.length).font = { bold: true };
+                sheet.getCell(3, 2 + 25 * days.length).value = "Всього"; sheet.getCell(3, 2 + 25 * days.length).font = { bold: true };
 
-                const rowHours = sheet.addRow(["Рядок / Години"]);
-                rowHours.getCell(1).font = { size: 10 };
-                
+                const rowHours = sheet.addRow(["Рядок / Години"]); rowHours.getCell(1).font = { size: 10 };
                 let currentCol = 2;
                 days.forEach((d, index) => {
                     for (let h = 0; h < 24; h++) {
-                        const cell = rowHours.getCell(currentCol);
-                        cell.value = h; 
-                        cell.alignment = alignCenter;
-                        cell.font = { size: 9 };
-                        cell.border = getBorders(h === 0, false);
-                        currentCol++;
+                        const cell = rowHours.getCell(currentCol); cell.value = h; cell.alignment = alignCenter; cell.font = { size: 9 }; cell.border = getBorders(h === 0, false); currentCol++;
                     }
-                    const sumCell = rowHours.getCell(currentCol);
-                    sumCell.value = "Σ";
-                    sumCell.alignment = alignCenter;
-                    sumCell.font = { bold: true, size: 9 };
-                    sumCell.fill = fillHeader;
-                    sumCell.border = getBorders(false, true);
-                    currentCol++;
+                    const sumCell = rowHours.getCell(currentCol); sumCell.value = "Σ"; sumCell.alignment = alignCenter; sumCell.font = { bold: true, size: 9 }; sumCell.fill = fillHeader; sumCell.border = getBorders(false, true); currentCol++;
                 });
 
                 const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
                 const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
-                
-                let totalK = availK;
-                let totalM = availM;
+                let totalK = availK, totalM = availM;
                 const availableDates = Object.keys(fleetActiveState[yard] || {});
                 if (availableDates.length > 0 && fleetActiveState[yard][availableDates[0]][0]) {
-                    totalK = fleetActiveState[yard][availableDates[0]][0].kamag.length;
-                    totalM = fleetActiveState[yard][availableDates[0]][0].man.length;
+                    totalK = fleetActiveState[yard][availableDates[0]][0].kamag.length; totalM = fleetActiveState[yard][availableDates[0]][0].man.length;
                 }
 
-                // === 1. ВЫВОД ФИЗИЧЕСКИХ КАМАГОВ ===
                 for (let k = 1; k <= availK; k++) {
-                    const rowLabel = `Kamag ${k}`;
-                    const row = sheet.addRow([rowLabel]);
-                    row.getCell(1).font = { bold: true, size: 10 };
-                    let weekTotal = 0;
-                    let cCol = 2;
-
+                    const row = sheet.addRow([`Kamag ${k}`]); row.getCell(1).font = { bold: true, size: 10 };
+                    let weekTotal = 0, cCol = 2;
                     days.forEach(d => {
                         let daySum = 0;
                         for (let h = 0; h < 24; h++) {
                             let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].kamag[k-1]) ? 1 : "";
-                            const cell = row.getCell(cCol);
-                            cell.value = val;
-                            cell.alignment = alignCenter;
-                            cell.border = getBorders(h === 0, false);
-                            
-                            if (val === 1) {
-                                cell.fill = fillActive; 
-                                daySum++; weekTotal++;
-                            }
-                            cCol++;
+                            const cell = row.getCell(cCol); cell.value = val; cell.alignment = alignCenter; cell.border = getBorders(h === 0, false);
+                            if (val === 1) { cell.fill = fillActive; daySum++; weekTotal++; } cCol++;
                         }
-                        const dSumCell = row.getCell(cCol);
-                        dSumCell.value = daySum || "";
-                        dSumCell.alignment = alignCenter;
-                        dSumCell.font = { bold: true };
-                        dSumCell.fill = fillSum;
-                        dSumCell.border = getBorders(false, true);
-                        cCol++;
+                        const dSumCell = row.getCell(cCol); dSumCell.value = daySum || ""; dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true); cCol++;
                     });
-                    
-                    const wSumCell = row.getCell(cCol);
-                    wSumCell.value = weekTotal;
-                    wSumCell.alignment = alignCenter;
-                    wSumCell.font = { bold: true };
-                    wSumCell.fill = fillHeader;
+                    const wSumCell = row.getCell(cCol); wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
                 }
 
-                // === 2. ВЫВОД ФИЗИЧЕСКИХ МАНОВ ===
                 for (let m = 1; m <= availM; m++) {
-                    const row = sheet.addRow([`Маневровий ${m}`]);
-                    row.getCell(1).font = { bold: true, size: 10 };
-                    let weekTotal = 0;
-                    let cCol = 2;
-
+                    const row = sheet.addRow([`Маневровий ${m}`]); row.getCell(1).font = { bold: true, size: 10 };
+                    let weekTotal = 0, cCol = 2;
                     days.forEach(d => {
                         let daySum = 0;
                         for (let h = 0; h < 24; h++) {
                             let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].man[m-1]) ? 1 : "";
-                            const cell = row.getCell(cCol);
-                            cell.value = val;
-                            cell.alignment = alignCenter;
-                            cell.border = getBorders(h === 0, false);
-                            
-                            if (val === 1) {
-                                cell.fill = fillActive; 
-                                daySum++; weekTotal++;
-                            }
-                            cCol++;
+                            const cell = row.getCell(cCol); cell.value = val; cell.alignment = alignCenter; cell.border = getBorders(h === 0, false);
+                            if (val === 1) { cell.fill = fillActive; daySum++; weekTotal++; } cCol++;
                         }
-                        const dSumCell = row.getCell(cCol);
-                        dSumCell.value = daySum || "";
-                        dSumCell.alignment = alignCenter;
-                        dSumCell.font = { bold: true };
-                        dSumCell.fill = fillSum;
-                        dSumCell.border = getBorders(false, true);
-                        cCol++;
+                        const dSumCell = row.getCell(cCol); dSumCell.value = daySum || ""; dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true); cCol++;
                     });
-                    
-                    const wSumCell = row.getCell(cCol);
-                    wSumCell.value = weekTotal;
-                    wSumCell.alignment = alignCenter;
-                    wSumCell.font = { bold: true };
-                    wSumCell.fill = fillHeader;
+                    const wSumCell = row.getCell(cCol); wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
                 }
 
-                // === 3. ВЫВОД ДОПОЛНИТЕЛЬНЫХ (ВИРТУАЛЬНЫХ) КАМАГОВ ===
                 if (!hideVirtual) {
                     for (let k = availK + 1; k <= totalK; k++) {
-                        const rowLabel = `Kamag ${k} (дод.)`;
-                        const row = sheet.addRow([rowLabel]);
-                        row.getCell(1).font = { bold: true, size: 10 };
-                        let weekTotal = 0;
-                        let cCol = 2;
-
+                        const row = sheet.addRow([`Kamag ${k} (дод.)`]); row.getCell(1).font = { bold: true, size: 10 };
+                        let weekTotal = 0, cCol = 2;
                         days.forEach(d => {
                             let daySum = 0;
                             for (let h = 0; h < 24; h++) {
                                 let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].kamag[k-1]) ? 1 : "";
-                                const cell = row.getCell(cCol);
-                                cell.value = val;
-                                cell.alignment = alignCenter;
-                                cell.border = getBorders(h === 0, false);
-                                
-                                if (val === 1) {
-                                    cell.fill = fillActiveVirtual; 
-                                    daySum++; weekTotal++;
-                                }
-                                cCol++;
+                                const cell = row.getCell(cCol); cell.value = val; cell.alignment = alignCenter; cell.border = getBorders(h === 0, false);
+                                if (val === 1) { cell.fill = fillActiveVirtual; daySum++; weekTotal++; } cCol++;
                             }
-                            const dSumCell = row.getCell(cCol);
-                            dSumCell.value = daySum || "";
-                            dSumCell.alignment = alignCenter;
-                            dSumCell.font = { bold: true };
-                            dSumCell.fill = fillSum;
-                            dSumCell.border = getBorders(false, true);
-                            cCol++;
+                            const dSumCell = row.getCell(cCol); dSumCell.value = daySum || ""; dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true); cCol++;
                         });
-                        
-                        const wSumCell = row.getCell(cCol);
-                        wSumCell.value = weekTotal;
-                        wSumCell.alignment = alignCenter;
-                        wSumCell.font = { bold: true };
-                        wSumCell.fill = fillHeader;
+                        const wSumCell = row.getCell(cCol); wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
                     }
-                }
-
-                // === 4. ВЫВОД ДОПОЛНИТЕЛЬНЫХ (ВИРТУАЛЬНЫХ) МАНОВ ===
-                if (!hideVirtual) {
                     for (let m = availM + 1; m <= totalM; m++) {
-                        const rowLabel = `Маневровий ${m} (дод.)`;
-                        const row = sheet.addRow([rowLabel]);
-                        row.getCell(1).font = { bold: true, size: 10 };
-                        let weekTotal = 0;
-                        let cCol = 2;
-
+                        const row = sheet.addRow([`Маневровий ${m} (дод.)`]); row.getCell(1).font = { bold: true, size: 10 };
+                        let weekTotal = 0, cCol = 2;
                         days.forEach(d => {
                             let daySum = 0;
                             for (let h = 0; h < 24; h++) {
                                 let val = (fleetActiveState[yard][d] && fleetActiveState[yard][d][h].man[m-1]) ? 1 : "";
-                                const cell = row.getCell(cCol);
-                                cell.value = val;
-                                cell.alignment = alignCenter;
-                                cell.border = getBorders(h === 0, false);
-                                
-                                if (val === 1) {
-                                    cell.fill = fillActiveVirtual; 
-                                    daySum++; weekTotal++;
-                                }
-                                cCol++;
+                                const cell = row.getCell(cCol); cell.value = val; cell.alignment = alignCenter; cell.border = getBorders(h === 0, false);
+                                if (val === 1) { cell.fill = fillActiveVirtual; daySum++; weekTotal++; } cCol++;
                             }
-                            const dSumCell = row.getCell(cCol);
-                            dSumCell.value = daySum || "";
-                            dSumCell.alignment = alignCenter;
-                            dSumCell.font = { bold: true };
-                            dSumCell.fill = fillSum;
-                            dSumCell.border = getBorders(false, true);
-                            cCol++;
+                            const dSumCell = row.getCell(cCol); dSumCell.value = daySum || ""; dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true); cCol++;
                         });
-                        
-                        const wSumCell = row.getCell(cCol);
-                        wSumCell.value = weekTotal;
-                        wSumCell.alignment = alignCenter;
-                        wSumCell.font = { bold: true };
-                        wSumCell.fill = fillHeader;
+                        const wSumCell = row.getCell(cCol); wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
                     }
                 }
                 sheet.addRow([]);
 
-                const excelOpsConfig = [
-                    "Всього операцій", 
-                    "Задіяно фіз. КАМАГ", 
-                    "Задіяно вірт. КАМАГ", 
-                    "Задіяно фіз. МАН", 
-                    "Задіяно вірт. МАН", 
-                    "Непокриті (фіз. флот)", 
-                    "Непокриті (залишок)"
-                ];
-
+                const excelOpsConfig = ["Всього операцій", "Задіяно фіз. КАМАГ", "Задіяно вірт. КАМАГ", "Задіяно фіз. МАН", "Задіяно вірт. МАН", "Непокриті (фіз. флот)", "Непокриті (залишок)"];
                 excelOpsConfig.forEach(rowName => {
-                    const row = sheet.addRow([rowName]);
-                    row.getCell(1).font = { bold: true, size: 10 };
-                    let weekTotal = 0;
-                    let oCol = 2;
-
+                    const row = sheet.addRow([rowName]); row.getCell(1).font = { bold: true, size: 10 };
+                    let weekTotal = 0, oCol = 2;
                     days.forEach(d => {
                         let daySum = 0;
                         for (let h = 0; h < 24; h++) {
                             let totalOps = (totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0;
                             let activePhysK = 0, activeVirtK = 0, activePhysM = 0, activeVirtM = 0;
-                            
                             if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
                                 const st = fleetActiveState[yard][d][h];
-                                activePhysK = st.kamag.slice(0, availK).filter(Boolean).length;
-                                activeVirtK = st.kamag.slice(availK).filter(Boolean).length;
-                                activePhysM = st.man.slice(0, availM).filter(Boolean).length;
-                                activeVirtM = st.man.slice(availM).filter(Boolean).length;
+                                activePhysK = st.kamag.slice(0, availK).filter(Boolean).length; activeVirtK = st.kamag.slice(availK).filter(Boolean).length;
+                                activePhysM = st.man.slice(0, availM).filter(Boolean).length; activeVirtM = st.man.slice(availM).filter(Boolean).length;
                             }
-
-                            let val = 0;
-                            let isUncovered = false;
-
+                            let val = 0, isUncovered = false;
                             if (rowName === "Всього операцій") val = totalOps;
                             else if (rowName === "Задіяно фіз. КАМАГ") val = activePhysK;
                             else if (rowName === "Задіяно вірт. КАМАГ") val = activeVirtK;
                             else if (rowName === "Задіяно фіз. МАН") val = activePhysM;
                             else if (rowName === "Задіяно вірт. МАН") val = activeVirtM;
-                            else if (rowName === "Непокриті (фіз. флот)") {
-                                const capPhysical = (activePhysK * yardNorms.k) + (activePhysM * yardNorms.m);
-                                val = Math.max(0, totalOps - capPhysical);
-                                isUncovered = true;
-                            } else if (rowName === "Непокриті (залишок)") {
-                                const activeTotalK = hideVirtual ? activePhysK : (activePhysK + activeVirtK);
-                                const activeTotalM = hideVirtual ? activePhysM : (activePhysM + activeVirtM);
-                                const capTotal = (activeTotalK * yardNorms.k) + (activeTotalM * yardNorms.m);
-                                val = Math.max(0, totalOps - capTotal);
-                                isUncovered = true;
-                            }
+                            else if (rowName === "Непокриті (фіз. флот)") { val = Math.max(0, totalOps - (activePhysK * yardNorms.k + activePhysM * yardNorms.m)); isUncovered = true; }
+                            else if (rowName === "Непокриті (залишок)") { val = Math.max(0, totalOps - ((hideVirtual ? activePhysK : activePhysK + activeVirtK) * yardNorms.k + (hideVirtual ? activePhysM : activePhysM + activeVirtM) * yardNorms.m)); isUncovered = true; }
 
-                            const cell = row.getCell(oCol);
-                            cell.value = val || "";
-                            cell.alignment = alignCenter;
-                            cell.border = getBorders(h === 0, false);
-
+                            const cell = row.getCell(oCol); cell.value = val || ""; cell.alignment = alignCenter; cell.border = getBorders(h === 0, false);
                             if (rowName === "Всього операцій" && val > 0) cell.fill = fillOps;
                             if (isUncovered && val > 0) { cell.fill = fillUncovered; cell.font = fontUncovered; }
-                            
-                            daySum += val;
-                            weekTotal += val;
-                            oCol++;
+                            daySum += val; weekTotal += val; oCol++;
                         }
-                        const dSumCell = row.getCell(oCol);
-                        dSumCell.value = daySum || "";
-                        dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true);
-                        oCol++;
+                        const dSumCell = row.getCell(oCol); dSumCell.value = daySum || ""; dSumCell.alignment = alignCenter; dSumCell.font = { bold: true }; dSumCell.fill = fillSum; dSumCell.border = getBorders(false, true); oCol++;
                     });
-
-                    const wSumCell = row.getCell(oCol);
-                    wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
+                    const wSumCell = row.getCell(oCol); wSumCell.value = weekTotal; wSumCell.alignment = alignCenter; wSumCell.font = { bold: true }; wSumCell.fill = fillHeader;
                 });
 
-                // ГЕНЕРАЦИЯ ДИНАМИЧЕСКИХ ГРАФИКОВ В ПАМЯТИ ДЛЯ КАЖДОГО ДНЯ
-                sheet.addRow([]);
-                sheet.addRow(["Графіки:"]).font = { bold: true };
+                sheet.addRow([]); sheet.addRow(["Графіки:"]).font = { bold: true };
                 const imgRow = sheet.rowCount; 
-
                 days.forEach((d, index) => {
                     const chartLabels = [], opsData = [], capacityData = [];
                     for (let h = 0; h < 24; h++) {
-                        chartLabels.push(`${h}:00`);
-                        opsData.push((totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0);
+                        chartLabels.push(`${h}:00`); opsData.push((totalOpsData[yard] && totalOpsData[yard][d]) ? totalOpsData[yard][d][h] : 0);
                         let cap = 0;
                         if (fleetActiveState[yard] && fleetActiveState[yard][d] && fleetActiveState[yard][d][h]) {
                             const st = fleetActiveState[yard][d][h];
-                            const activeK = hideVirtual ? st.kamag.slice(0, availK).filter(Boolean).length : st.kamag.filter(Boolean).length;
-                            const activeM = hideVirtual ? st.man.slice(0, availM).filter(Boolean).length : st.man.filter(Boolean).length;
-                            cap += activeK * yardNorms.k;
-                            cap += activeM * yardNorms.m;
+                            cap += (hideVirtual ? st.kamag.slice(0, availK).filter(Boolean).length : st.kamag.filter(Boolean).length) * yardNorms.k;
+                            cap += (hideVirtual ? st.man.slice(0, availM).filter(Boolean).length : st.man.filter(Boolean).length) * yardNorms.m;
                         }
                         capacityData.push(cap);
                     }
-
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 620;
-                    canvas.height = 100;
-                    const ctx = canvas.getContext('2d');
-
-                    const tempChart = new Chart(ctx, {
-                        type: 'bar',
-                        data: { labels: chartLabels, datasets: [
-                            { type: 'line', label: 'Потужність', data: capacityData, borderColor: '#0d47a1', backgroundColor: '#0d47a1', borderWidth: 2, tension: 0.3, pointRadius: 2 },
-                            { type: 'bar', label: 'Операції', data: opsData, backgroundColor: 'rgba(255, 193, 7, 0.7)', borderColor: '#ffaa00', borderWidth: 1 }
-                        ]},
-                        options: { 
-                            animation: false, responsive: false, maintainAspectRatio: false,
-                            scales: { x: { display: false }, y: { display: false, beginAtZero: true } },
-                            plugins: { legend: { display: false } }
-                        }
-                    });
-
-                    const base64 = canvas.toDataURL('image/png');
-                    tempChart.destroy();
-
-                    const imageId = workbook.addImage({
-                        base64: base64.split(',')[1],
-                        extension: 'png',
-                    });
-                    
-                    sheet.addImage(imageId, {
-                        tl: { col: 1 + index * 25, row: imgRow },
-                        ext: { width: 620, height: 100 } 
-                    });
+                    const canvas = document.createElement('canvas'); canvas.width = 620; canvas.height = 100; const ctx = canvas.getContext('2d');
+                    const tempChart = new Chart(ctx, { type: 'bar', data: { labels: chartLabels, datasets: [{ type: 'line', data: capacityData, borderColor: '#0d47a1', backgroundColor: '#0d47a1', borderWidth: 2 }, { type: 'bar', data: opsData, backgroundColor: 'rgba(255, 193, 7, 0.7)' }]}, options: { animation: false, responsive: false, scales: { x: { display: false }, y: { display: false, beginAtZero: true } }, plugins: { legend: { display: false } } } });
+                    const base64 = canvas.toDataURL('image/png'); tempChart.destroy();
+                    sheet.addImage(workbook.addImage({ base64: base64.split(',')[1], extension: 'png' }), { tl: { col: 1 + index * 25, row: imgRow }, ext: { width: 620, height: 100 } });
                 });
-                
                 for(let i=0; i<6; i++) sheet.addRow([]); 
             });
         }
-
-        const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `Kamagon_Export_${new Date().getTime()}.xlsx`);
-
-    } catch (err) {
-        console.error(err);
-        alert("Помилка при експорті!");
-    } finally {
-        btn.innerText = originalText;
-        btn.disabled = false;
-    }
+        saveAs(new Blob([await workbook.xlsx.writeBuffer()]), `Kamagon_Export_${new Date().getTime()}.xlsx`);
+    } catch (err) { console.error(err); alert("Помилка при експорті!"); } finally { btn.innerText = originalText; btn.disabled = false; }
 });
 
-// СОХРАНЕНИЕ
+// СОХРАНЕНИЕ ТЕКУЩЕГО ДВОРА
 document.getElementById('saveGoogleBtn').addEventListener('click', async () => {
     const yard = document.getElementById('kamagYardSelect').value;
     if (!yard) return alert("Оберіть автодвір!");
+    const btn = document.getElementById('saveGoogleBtn'); btn.innerText = "⏳...";
 
-    const btn = document.getElementById('saveGoogleBtn');
-    btn.innerText = "⏳ Збереження...";
-
-    const aggregatedRows = [];
-    const days = Object.keys(totalOpsData[yard] || {});
-
+    const aggregatedRows = []; const days = Object.keys(totalOpsData[yard] || {});
     days.forEach(day => {
         for (let h = 0; h < 24; h++) {
             const opsCount = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][h] : 0;
-            
-            let stateString = "0|0";
-            let hasActive = false;
-
+            let stateString = "0|0", hasActive = false;
             if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][h]) {
-                const kArr = fleetActiveState[yard][day][h].kamag;
-                const mArr = fleetActiveState[yard][day][h].man;
-                stateString = `${kArr.join(',')}|${mArr.join(',')}`;
-                hasActive = kArr.some(v => v > 0) || mArr.some(v => v > 0);
+                const kArr = fleetActiveState[yard][day][h].kamag; const mArr = fleetActiveState[yard][day][h].man;
+                stateString = `${kArr.join(',')}|${mArr.join(',')}`; hasActive = kArr.some(v => v > 0) || mArr.some(v => v > 0);
             }
-            
             if (opsCount > 0 || hasActive) aggregatedRows.push([yard, day, h, stateString, opsCount]);
         }
     });
 
     try {
-            await fetch(RESULTS_SCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action: 'saveAggregated', yard: yard, rows: aggregatedRows, dates: days })
-            });
-            btn.innerText = "✅ Збережено!";
-        } catch (e) {
-        btn.innerText = "❌ Помилка";
-    }
+        await fetch(RESULTS_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveAggregated', yard: yard, rows: aggregatedRows, dates: days }) });
+        btn.innerText = "✅ Збережено!";
+    } catch (e) { btn.innerText = "❌ Помилка"; }
     setTimeout(() => btn.innerText = "Зберегти (поточний)", 3000);
 });
 
+// СОХРАНЕНИЕ ВСЕХ ДВОРОВ
 document.getElementById('saveAllGoogleBtn').addEventListener('click', async () => {
-    const yards = Object.keys(totalOpsData);
-    if (yards.length === 0) return alert("Немає розрахованих даних для збереження!");
+    const yards = Object.keys(totalOpsData); if (yards.length === 0) return alert("Немає розрахованих данных для збереження!");
+    const btn = document.getElementById('saveAllGoogleBtn'); btn.innerText = "⏳..."; btn.disabled = true;
 
-    const btn = document.getElementById('saveAllGoogleBtn');
-    btn.innerText = "⏳ Збереження...";
-    btn.disabled = true;
-
-    const aggregatedRows = [];
-
+    const aggregatedRows = [], allDays = new Set();
     yards.forEach(yard => {
         const days = Object.keys(totalOpsData[yard] || {});
         days.forEach(day => {
+            allDays.add(day);
             for (let h = 0; h < 24; h++) {
                 const opsCount = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][h] : 0;
-                
-                let stateString = "0|0";
-                let hasActive = false;
-
+                let stateString = "0|0", hasActive = false;
                 if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][h]) {
-                    const kArr = fleetActiveState[yard][day][h].kamag;
-                    const mArr = fleetActiveState[yard][day][h].man;
-                    stateString = `${kArr.join(',')}|${mArr.join(',')}`;
-                    hasActive = kArr.some(v => v > 0) || mArr.some(v => v > 0);
+                    const kArr = fleetActiveState[yard][day][h].kamag; const mArr = fleetActiveState[yard][day][h].man;
+                    stateString = `${kArr.join(',')}|${mArr.join(',')}`; hasActive = kArr.some(v => v > 0) || mArr.some(v => v > 0);
                 }
-                
                 if (opsCount > 0 || hasActive) aggregatedRows.push([yard, day, h, stateString, opsCount]);
             }
         });
     });
 
     try {
-        const allDays = new Set();
-        yards.forEach(y => {
-            Object.keys(totalOpsData[y] || {}).forEach(day => allDays.add(day));
-        });
-
-        await fetch(RESULTS_SCRIPT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'saveAllAggregated', yards: yards, rows: aggregatedRows, dates: Array.from(allDays) })
-        });
+        await fetch(RESULTS_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveAllAggregated', yards: yards, rows: aggregatedRows, dates: Array.from(allDays) }) });
         btn.innerText = "✅ Всі збережено!";
-    } catch (e) {
-        console.error(e);
-        btn.innerText = "❌ Помилка";
-    }
-    setTimeout(() => {
-        btn.innerText = "Зберегти ВСІ";
-        btn.disabled = false;
-    }, 3000);
+    } catch (e) { btn.innerText = "❌ Помилка"; }
+    setTimeout(() => { btn.innerText = "Зберегти ВСІ"; btn.disabled = false; }, 3000);
 });
 
-// Автоматическая активация вкладки при загрузке
 document.addEventListener('DOMContentLoaded', () => {
     tabKamag.click();
-    
-    // Пересчитываем дефициты моментально при изменении переключателя KAMAG/МАН
     document.querySelectorAll('input[name="virtualFleetType"]').forEach(radio => {
-        radio.addEventListener('change', () => {
-            if (Object.keys(totalOpsData).length > 0) {
-                calculateFleetRequirements();
-            }
-        });
+        radio.addEventListener('change', () => { if (Object.keys(totalOpsData).length > 0) calculateFleetRequirements(); });
     });
 });
 

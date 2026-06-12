@@ -23,7 +23,7 @@
             </label>
             <input type="file" id="fileInput" multiple accept=".xlsx, .xls" style="display: none;">
             
-            <span id="fileStatus">Довідник завантажується...</span>
+            <span id="fileStatus">Завантаження...</span>
 
             <div id="progressContainer" class="progress-container" style="display: none;">
                 <div id="progressBar" class="progress-bar"></div>
@@ -46,13 +46,16 @@
             <button class="tab-btn auth-hidden" id="tabDetailed">Рейси контейнерів</button>
             <button class="tab-btn auth-hidden" id="tabEvents">Події</button>
             <button class="tab-btn active" id="tabKamag">Розрахунок</button>
+            <button class="tab-btn auth-hidden" id="tabFact">Розрахунок (Факт)</button>
+            <button class="tab-btn auth-hidden" id="tabRdu">Робоче місце РДУ</button>
+            <button class="tab-btn auth-hidden" id="tabCompare">Результати</button>
         </div>
     </div>
 
     <div class="main-content">
         <div id="tableContainerRaw" class="table-container" style="display: none;">
             <div class="tab-controls-panel">
-                <button id="togglePtBtn">Пром. точки</button>
+                <!-- <button id="togglePtBtn">Пром. точки</button> -->
                 <button id="unknownRoutesBtn">Невідомі маршрути</button>
                  <a href="https://docs.google.com/spreadsheets/d/1Pjp5PP1sCR5R9MORAG9JmgcPG4y0q955vJ-T8FajAXs/edit?gid=0#gid=0" target="_blank" class="settings-btn">
                     Налаштування
@@ -66,8 +69,10 @@
             </div>
             <div id="rawTableWrapper"></div>
         </div>
+        
         <div id="tableContainerDetailed" class="table-container" style="display: none;"></div>
         <div id="tableContainerEvents" class="table-container" style="display: none;"></div>
+        
         <div id="tableContainerKamag" class="table-container" style="display: none; flex-direction: column;">
             <div class="kamag-controls-panel">
                 <div class="controls-row">
@@ -96,7 +101,7 @@
                 <div class="controls-row filters-row">
                     <div class="controls-group-left"> 
                         <div class="date-filter-group">
-                            <span class="filter-label">Період відображення:</span>
+                            <span class="filter-label">Період:</span>
                             <input type="date" id="kamagStartDate" class="custom-date-input">
                             <span class="date-separator">—</span>
                             <input type="date" id="kamagEndDate" class="custom-date-input">
@@ -108,7 +113,7 @@
                         </label>
 
                         <div class="compact-checkbox" style="display: flex; gap: 10px; align-items: center; background: #fff; padding: 0 10px; border: 1px solid #ced4da; border-radius: 4px; height: 28px; font-size: 11px;">
-                            <span style="font-weight: 600; color: #495057;">Розрахунок дод. ТЗ за рахунок:</span>
+                            <span style="font-weight: 600; color: #495057;">Додатковий ТЗ за рахунок:</span>
                             <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-weight: normal; margin: 0;"><input type="radio" name="virtualFleetType" value="kamag" checked style="margin:0; width:14px; height:14px;"> KAMAG</label>
                             <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-weight: normal; margin: 0;"><input type="radio" name="virtualFleetType" value="man" style="margin:0; width:14px; height:14px;"> МАН</label>
                         </div>
@@ -124,17 +129,148 @@
                         </div>
                     </div>
                 </div>
-                
             </div>
             <div id="kamagTableWrapper" style="overflow: auto;"></div>
         </div>
-    </div>
 
-    <div id="unknownRoutesModal" class="modal">
+        <div id="tableContainerFact" class="table-container" style="display: none; flex-direction: column;">
+            <div class="kamag-controls-panel">
+                <div class="controls-row">
+                    <div class="controls-group-left">
+                        <label class="yard-select-label">
+                            Автодвір: 
+                            <select id="factYardSelect">
+                                <option value="" disabled selected>-- Оберіть автодвір --</option>
+                            </select>
+                        </label>
+                        
+                        <button id="loadFactGoogleYardBtn" class="tab-btn btn-action btn-load">
+                            Завантажити з бази
+                        </button>
+                        
+                        <label for="factFileInput" class="file-label auth-hidden" id="factFileInputLabel">
+                            Завантажити з CSV
+                        </label>
+                        <input type="file" id="factFileInput" accept=".csv" style="display: none;">
+                        
+                        <span id="factFileStatus">Очікування CSV...</span>
+                    </div>
+                    
+                    <div class="controls-group-right">
+                        <button id="saveFactGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
+                            Зберегти (поточний)
+                        </button>
+                        <button id="saveAllFactGoogleBtn" class="tab-btn btn-action btn-save-all auth-hidden">
+                            Зберегти ВСІ
+                        </button>
+                    </div>
+                </div>
+
+                <div class="panel-divider"></div>
+                <div class="controls-row filters-row">
+                    <div class="controls-group-left">
+                        <div class="date-filter-group">
+                            <span class="filter-label">Період:</span>
+                            <input type="date" id="factStartDate" class="custom-date-input">
+                            <span class="date-separator">—</span>
+                            <input type="date" id="factEndDate" class="custom-date-input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="factTableWrapper" style="overflow: auto;"></div>
+        </div>
+
+        <div id="tableContainerCompare" class="table-container" style="display: none; flex-direction: column;">
+            <div class="kamag-controls-panel">
+                <div class="controls-row">
+                    <div class="controls-group-left">
+                        <div id="compareYardContainer" style="display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 13px; color: #1e293b;">
+                            Автодвір: 
+                            <select id="compareYardSelect" style="height: 28px; padding: 0 5px; font-size: 11px; min-width: 140px; border-color: #adb5bd;"></select>
+                        </div>
+                        
+                        <div class="date-filter-group" style="margin-left: 15px;">
+                            <span class="filter-label">Період:</span>
+                            <input type="date" id="compareStartDate" class="custom-date-input">
+                            <span class="date-separator">—</span>
+                            <input type="date" id="compareEndDate" class="custom-date-input">
+                        </div>
+
+                        <button id="loadCompareDataBtn" class="tab-btn btn-action btn-load" style="margin-left: 15px; width: 210px;">
+                            Завантажити дані
+                        </button>
+                    </div>
+                    
+                    <div class="controls-group-right">
+                        <div class="legend-hover-wrapper" style="margin-right: 10px;">
+                            <div class="legend-trigger">🎨 Легенда</div>
+                            <div class="legend-popup" style="min-width: 240px;">
+                                <div class="legend-item"><span class="legend-color" style="background: #ea580c;"></span> 1 — План = Факт</div>
+                                <div class="legend-item"><span class="legend-color" style="background: #dc2626;"></span> 1 — Факт > План</div>
+                                <div class="legend-item"><span class="legend-color" style="background: #ffedd5; border: 1px solid #ea580c;"></span> 0 — Факт < План</div>
+                                <div class="legend-item"><span class="legend-color" style="background: #fff;"></span> План 0, Факт 0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="compareTableWrapper" style="overflow: auto; padding: 5px 15px;"></div>
+            
+            <div id="compareChartArea" style="padding: 10px 15px; background: #fff; border-top: 1px solid #dee2e6; height: 260px; min-height: 260px;">
+                <div style="height: 100%; width: 100%;">
+                    <canvas id="combinedCompareChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="tableContainerRdu" class="table-container" style="display: none; flex-direction: column;">
+            <div class="kamag-controls-panel">
+                <div class="controls-row">
+                    <div class="controls-group-left">
+                        <div id="rduYardContainer" style="display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 13px; color: #1e293b;">
+                            Автодвір: <span style="color: #0284c7;">Очікування...</span>
+                        </div>
+                        
+                        <div class="date-filter-group" style="margin-left: 15px;">
+                            <span class="filter-label">День:</span>
+                            <input type="date" id="rduWorkDate" class="custom-date-input">
+                        </div>
+
+                        <button id="loadRduGoogleBtn" class="tab-btn btn-action btn-load" style="margin-left: 15px;">
+                            Завантажити з бази
+                        </button>
+
+                        <div style="display: flex; align-items: center; gap: 6px; margin-left: 15px; background: #fff; height: 28px; padding: 0 8px; border: 1px solid #ced4da; border-radius: 4px;">
+                            <select id="rduVehicleTypeSelect" style="height: 22px; padding: 0 3px; font-size: 11px; border: 1px solid #ced4da; border-radius: 3px; background: transparent; outline: none;">
+                                <option value="Kamag">KAMAG</option>
+                                <option value="Маневровий">Маневровий</option>
+                            </select>
+                            <button id="rduAddVehicleBtn" style="height: 22px; padding: 0 8px; background-color: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; border-radius: 3px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 2px;">
+                                ➕ Додати ТЗ
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="controls-group-right">
+                        <button id="saveRduGoogleBtn" class="tab-btn btn-action btn-save">
+                            Зберегти день
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="rduTableWrapper" style="overflow: auto; padding: 10px 15px;"></div>
+        </div>
+
+
+    </div> <div id="unknownRoutesModal" class="modal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>
             <h2>Маршрути без схеми</h2>
-            <button id="copyUnknownBtn" style="margin-bottom: 15px; padding: 6px 12px; font-weight: bold;">Копіювати список</button>
+            <button id="copyUnknownBtn" style="margin-bottom: 15px; padding: 6px 12px; font-weight: bold;">Копіювати</button>
             <div id="unknownRoutesTableContainer"></div>
         </div>
     </div>
@@ -182,5 +318,8 @@
     </div>
 
     <script src="app.js"></script>
+    <script src="fact.js"></script> 
+    <script src="rdu.js"></script>
+    <script src="compare.js"></script>
 </body>
 </html>

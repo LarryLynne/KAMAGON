@@ -1027,3 +1027,205 @@ th.col-day .filter-input {
 .hidden {
     display: none !important;
 }
+
+/* =========================================
+   ВИЗУАЛЬНОЕ ОТДЕЛЕНИЕ БЛОКА ИТОГОВ ФЛОТА
+   ========================================= */
+.fleet-summary-top td {
+    border-top: 2px solid #334155 !important;
+}
+
+.fleet-summary-bottom td {
+    border-bottom: 2px solid #334155 !important;
+}
+
+/* Дополнительно подсветим фон блока расчетов, чтобы он смотрелся цельно */
+.fleet-summary-top td,
+.fleet-summary-bottom td,
+.fleet-summary-row td {
+    background-color: #f8fafc;
+}
+
+/* Стили для модуля Факта */
+.fact-matrix-title {
+    margin: 15px 0 5px 0; 
+    color: #1e293b; 
+    border-left: 4px solid #0284c7; 
+    padding-left: 10px;
+}
+
+.fact-cell-active {
+    background-color: #e0f2fe !important;
+    font-weight: bold;
+    text-align: center;
+}
+
+.fact-header-vertical {
+    font-size: 10px;
+    text-align: center;
+    background-color: #f8fafc;
+}
+
+#factFileInputLabel {
+    margin-left: 10px;
+}
+
+#factFileStatus {
+    font-size: 12px;
+    color: #64748b;
+    margin-left: 10px;
+}
+
+/* Панелі-аккордеони для Факту (Монолітний баян без відступів) */
+.fact-accordion {
+    margin-bottom: 0; /* Прибрали відступ між секціями */
+    border: 1px solid #cbd5e1;
+    border-radius: 0; /* Скидаємо базове скруглення */
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Скруглення тільки для верхнього кута першої панелі */
+.fact-accordion:first-of-type {
+    border-radius: 6px 6px 0 0;
+}
+
+/* Скруглення для нижнього кута останньої панелі + загальний відступ знизу сторінки */
+.fact-accordion:last-of-type {
+    border-radius: 0 0 6px 6px;
+    margin-bottom: 25px; 
+}
+
+/* Ховаємо верхню рамку у наступних блоків, щоб вона не подвоювалася з нижньою рамкою попереднього */
+.fact-accordion + .fact-accordion {
+    border-top: none;
+}
+
+/* Вузька панелька (заголовок) */
+.fact-accordion-header {
+    padding: 10px 15px;
+    background-color: #f1f5f9;
+    font-weight: bold;
+    color: #334155;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    border-bottom: 1px solid #cbd5e1;
+    font-size: 13px;
+}
+
+.fact-accordion-header:hover {
+    background-color: #e2e8f0;
+    color: #0f172a;
+}
+
+/* Стрілочка-індикатор */
+.fact-accordion-header::after {
+    content: '▲';
+    font-size: 10px;
+    color: #64748b;
+    transition: transform 0.2s ease;
+}
+
+/* Стан згорнутої панельки */
+.fact-accordion.collapsed .fact-accordion-header {
+    border-bottom-color: transparent;
+    background-color: #f8fafc;
+}
+
+.fact-accordion.collapsed .fact-accordion-header::after {
+    content: '▼';
+}
+
+/* Контент всередині панелі */
+.fact-accordion-content {
+    padding: 0;
+    overflow: auto;    /* Дозволяє і вертикальний, і горизонтальний скрол всередині секції */
+    max-height: 380px; /* Фіксована максимальна висота секції. Більше вона не розтягнеться! */
+    display: block;
+}
+
+.fact-accordion-content p,
+.fact-accordion-content .disabled {
+    padding: 15px;
+    margin: 0;
+    color: #64748b;
+}
+
+.fact-accordion-content table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10; /* Шапка завжди буде поверх рядків, що прокручуються */
+}
+
+.fact-accordion-content table {
+    border-top: none;
+    margin-top: 0;
+}
+
+.fact-accordion-content table thead th {
+    background-color: #f1f5f9; /* Дефолтний фон для звичайних таблиць рейсів та подій */
+    box-shadow: inset 0 -1px 0 #cbd5e1, inset 0 1px 0 #cbd5e1; /* Зберігаємо рамки при ліпленні */
+}
+
+.fact-matrix-th-day {
+    background-color: #e2e8f0 !important;
+}
+.fact-matrix-th-hour {
+    background-color: #f8fafc !important;
+}
+.fact-matrix-th-sigma {
+    background-color: #cbd5e1 !important;
+}
+
+.fact-accordion.collapsed .fact-accordion-content {
+    display: none; 
+}
+
+/* Стилізація контейнерів під діаграми Факту */
+.fact-chart-row-label {
+    font-weight: bold;
+    font-size: 11px;
+    vertical-align: middle;
+}
+
+.fact-chart-td {
+    border-left: 2px solid #6c757d;
+    vertical-align: bottom;
+    padding: 0;
+    background: #ffffff;
+}
+
+.fact-chart-wrapper {
+    height: 135px;
+    width: 100%;
+}
+
+.fact-chart-td-space {
+    border-right: 2px solid #6c757d;
+    background-color: #dee2e6;
+}
+
+.fact-chart-td-end {
+    background-color: #e9ecef;
+}
+
+/* Контейнер для баяна Факту */
+#factTableWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0;           /* Вот теперь точно ноль! */
+    overflow: auto;
+    padding-top: 10px;
+}
+
+/* Фікс для легенди, яка знаходиться біля правого краю екрану */
+.controls-group-right .legend-popup {
+    left: auto;
+    right: 0;
+}
