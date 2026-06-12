@@ -113,7 +113,7 @@ function getFactFilteredDates(yard) {
     });
 }
 
-// Допоміжна функція єдиного розрахунку флоту (для таблиці та для збереження)
+// Допоміжна функція єдиного розрахунку флоту
 function getFactFleetRequirements(yard, dates) {
     const availK = (typeof fleetDictionary !== 'undefined' && fleetDictionary[yard]) ? fleetDictionary[yard].kamag : 0;
     const availM = (typeof fleetDictionary !== 'undefined' && fleetDictionary[yard]) ? fleetDictionary[yard].man : 0;
@@ -179,7 +179,7 @@ function getFactFleetRequirements(yard, dates) {
     };
 }
 
-// Парсинг та розрахунок 4-х операцій
+// ОБНОВЛЕННЫЙ ПАРСИНГ: Извлечение причины создания рейса
 function processFactData(text) {
     actualFlightsData = [];
     factCalculatedEvents = [];
@@ -194,12 +194,21 @@ function processFactData(text) {
         if (!currentLine) continue;
 
         const cols = currentLine.split(';').map(c => c.trim().replace(/^"|"$/g, ''));
-        if (cols.length < 10) continue;
+        if (cols.length < 11) continue;
 
         rawRows.push({
-            flight: cols[0], route: cols[1], statement: cols[2],
-            startLoadStr: cols[3], endLoadStr: cols[4], departureStr: cols[5], arrivalStr: cols[6],
-            nodeA: cols[7], nodeB: cols[8], vehicle: cols[9]
+            flight: cols[0], 
+            reason: cols[1] || '—', // Запись причины
+            route: cols[2], 
+            statement: cols[3],
+            startLoadStr: cols[4], 
+            endLoadStr: cols[5], 
+            departureStr: cols[6], 
+            arrivalStr: cols[7],
+            nodeA: cols[8], 
+            nodeB: cols[9], 
+            vehicle: cols[10],
+            container: cols[11] || '—'
         });
     }
 
@@ -257,24 +266,25 @@ function processFactData(text) {
 
             actualFlightsData.push(row);
 
+            // Добавление номера контейнера в рассчитываемые события
             if (row.yardA !== "Невідомий автодвір") {
                 if (dPlacementA) {
-                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, eventType: "1. Постановка", dateTime: dPlacementA });
+                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
                     recordMatrixOp(row.yardA, dPlacementA, "op1");
                 }
                 if (dRampLeaveA) {
-                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, eventType: "2. Забір", dateTime: dRampLeaveA });
+                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "2. Забір", dateTime: dRampLeaveA });
                     recordMatrixOp(row.yardA, dRampLeaveA, "op2");
                 }
             }
 
             if (row.yardB !== "Невідомий автодвір") {
                 if (dPlacementB) {
-                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, vehicle: row.vehicle, eventType: "3. Постановка", dateTime: dPlacementB });
+                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "3. Постановка", dateTime: dPlacementB });
                     recordMatrixOp(row.yardB, dPlacementB, "op3");
                 }
                 if (dRampLeaveB) {
-                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, vehicle: row.vehicle, eventType: "4. Забір", dateTime: dRampLeaveB });
+                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "4. Забір", dateTime: dRampLeaveB });
                     recordMatrixOp(row.yardB, dRampLeaveB, "op4");
                 }
             }
@@ -329,7 +339,6 @@ function renderFactDashboard() {
 
     if (!wrapper) return;
 
-    // ПРОВЕРКА ИСПРАВЛЕНА: Проверяем наличие либо сырых CSV рейсов, либо загруженной из БД матрицы
     const hasDbMatrix = factOpsMatrix[selectedYard] && Object.keys(factOpsMatrix[selectedYard]).length > 0;
 
     if (actualFlightsData.length === 0 && !hasDbMatrix) {
@@ -342,18 +351,15 @@ function renderFactDashboard() {
         return;
     }
 
-    // Рендерим аккордеоны. Если загружено из базы (нет детальных рейсов), автоматически сворачиваем блоки 2 и 3
     wrapper.innerHTML = `
         <div class="fact-accordion" id="accBlockMatrix">
             <div class="fact-accordion-header">Розрахунок</div>
             <div class="fact-accordion-content" id="factContentMatrix"></div>
         </div>
-
         <div class="fact-accordion ${actualFlightsData.length === 0 ? 'collapsed' : ''}" id="accBlockEvents">
             <div class="fact-accordion-header">Події ${actualFlightsData.length === 0 ? '(доступно тільки при завантаженні CSV)' : ''}</div>
             <div class="fact-accordion-content" id="factContentEvents"></div>
         </div>
-
         <div class="fact-accordion ${actualFlightsData.length === 0 ? 'collapsed' : ''}" id="accBlockFlights">
             <div class="fact-accordion-header">Рейси ${actualFlightsData.length === 0 ? '(доступно тільки при завантаженні CSV)' : ''}</div>
             <div class="fact-accordion-content" id="factContentFlights"></div>
@@ -371,7 +377,6 @@ function renderFactDashboard() {
     fillFlightsContent(selectedYard);
 }
 
-// Побудова відфільтрованої горизонтальної матриці + графіки
 function fillCalculatedFleetMatrix(yard) {
     const container = document.getElementById('factContentMatrix');
     const dates = getFactFilteredDates(yard);
@@ -399,7 +404,6 @@ function fillCalculatedFleetMatrix(yard) {
     });
     html += `<th></th></tr></thead><tbody>`;
 
-    // КАМАГи
     for (let k = 1; k <= totalK; k++) {
         const isVirtual = k > availK;
         html += `<tr><td style="font-weight:bold;">Kamag ${k}${isVirtual ? ' (дод.)' : ''}</td>`;
@@ -424,7 +428,6 @@ function fillCalculatedFleetMatrix(yard) {
         html += `<td style="text-align:center; font-weight:bold; background-color:#e9ecef;">${totalRowSum}</td></tr>`;
     }
 
-    // МАНи
     for (let m = 1; m <= totalM; m++) {
         const isVirtual = m > availM;
         html += `<tr><td style="font-weight:bold;">Маневровий ${m}${isVirtual ? ' (дод.)' : ''}</td>`;
@@ -449,7 +452,6 @@ function fillCalculatedFleetMatrix(yard) {
         html += `<td style="text-align:center; font-weight:bold; background-color:#e9ecef;">${totalRowSum}</td></tr>`;
     }
 
-    // Задіяно ТЗ підсумки
     const summaryRows = [
         { label: "Задіяно фіз. КАМАГ", type: 'physK' },
         { label: "Задіяно вірт. КАМАГ", type: 'virtK' },
@@ -480,14 +482,13 @@ function fillCalculatedFleetMatrix(yard) {
                 html += `<td class="kamag-cell" style="${border} background-color:#fff9c4; font-weight:bold;">${val || ''}</td>`;
                 dailySum += val; totalRowSum += val;
             }
-            html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right:2px solid #6c757d;">${dailySum || ''}</td>`;
+            html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right: 2px solid #6c757d;">${dailySum || ''}</td>`;
         });
         html += `<td style="text-align:center; font-weight:bold; background-color:#e9ecef;">${totalRowSum}</td></tr>`;
     });
 
     html += `<tr><td style="font-weight:bold; height:15px; background-color:#f8fafc;" colspan="${1 + dates.length * 25}"></td></tr>`;
     
-    // Всього операцій
     html += `<tr><td style="font-weight:bold;">Всього операцій</td>`;
     let totalGlobalOps = 0;
     dates.forEach(d => {
@@ -498,11 +499,10 @@ function fillCalculatedFleetMatrix(yard) {
             html += `<td class="kamag-cell" style="background-color:#fff9c4; font-weight:bold;" ${border}>${val || ''}</td>`;
             dailySum += val; totalGlobalOps += val;
         }
-        html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right:2px solid #6c757d;">${dailySum || ''}</td>`;
+        html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right: 2px solid #6c757d;">${dailySum || ''}</td>`;
     });
     html += `<td style="text-align:center; font-weight:bold; background-color:#e9ecef;">${totalGlobalOps}</td></tr>`;
 
-    // Непокриті фіз. флот
     html += `<tr><td style="font-weight:bold;">Непокриті (фіз. флот)</td>`;
     let totalUncoveredPhys = 0;
     dates.forEach(d => {
@@ -520,11 +520,10 @@ function fillCalculatedFleetMatrix(yard) {
                 html += `<td class="kamag-cell" ${border}></td>`;
             }
         }
-        html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right:2px solid #6c757d;">${dailySum || ''}</td>`;
+        html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right: 2px solid #6c757d;">${dailySum || ''}</td>`;
     });
     html += `<td style="text-align:center; font-weight:bold; background-color:#e9ecef;">${totalUncoveredPhys}</td></tr>`;
 
-    // Непокриті залишок
     html += `<tr><td style="font-weight:bold;">Непокриті (залишок)</td>`;
     let totalUncoveredAbs = 0;
     dates.forEach(d => {
@@ -539,15 +538,13 @@ function fillCalculatedFleetMatrix(yard) {
                 html += `<td class="kamag-cell" ${border}><span class="uncovered-alert">${val}</span></td>`;
                 dailySum += val; totalUncoveredAbs += val;
             } else {
-                html += `<td class="kamag-cell" ${border}></td>
-`;
+                html += `<td class="kamag-cell" ${border}></td>`;
             }
         }
-        html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right:2px solid #6c757d;">${dailySum || ''}</td>`;
+        html += `<td style="text-align:center; font-weight:bold; background-color:#f1f3f5; border-right: 2px solid #6c757d;">${dailySum || ''}</td>`;
     });
     html += `<td style="text-align:center; font-weight:bold; background-color:#e9ecef;">${totalUncoveredAbs}</td></tr>`;
 
-    // Рендер Графіків
     html += `<tr><td class="fact-chart-row-label">Графік</td>`;
     dates.forEach((d, idx) => {
         html += `<th colspan="24" class="fact-chart-td"><div class="fact-chart-wrapper"><canvas id="fact_chart_${idx}"></canvas></div></th><td class="fact-chart-td-space"></td>`;
@@ -564,17 +561,14 @@ function fillCalculatedFleetMatrix(yard) {
         const ctx = document.getElementById(`fact_chart_${index}`);
         if (!ctx) return;
         const parentDiv = ctx.parentElement;
-        
         ctx.width = parentDiv.clientWidth; ctx.height = 135; 
 
         const chartLabels = [], opsData = [], capacityData = [];
         for (let h = 0; h < 24; h++) {
             chartLabels.push(`${h}:00`);
             opsData.push(hourlyRequirements[d][h].ops);
-            
             const req = hourlyRequirements[d][h];
-            const cap = (req.kamag * yardNorms.k) + (req.man * yardNorms.m);
-            capacityData.push(cap);
+            capacityData.push((req.kamag * yardNorms.k) + (req.man * yardNorms.m));
         }
 
         window.myFactDayCharts.push(new Chart(ctx, {
@@ -597,8 +591,7 @@ function fillCalculatedFleetMatrix(yard) {
     });
 }
 
-// Наповнення Блоку 2: Стрічка подій
-// ЗАУВАЖЕННЯ ВИПРАВЛЕНО: Наповнення Блоку 2 з текстовими фільтрами по колонках
+// ОБНОВЛЕННЫЙ БЛОК 2: Добавлена колонка Контейнер (data-col="4")
 function fillEventsContent(yard) {
     const container = document.getElementById('factContentEvents');
     const allowedDates = getFactFilteredDates(yard);
@@ -614,27 +607,28 @@ function fillEventsContent(yard) {
         <th>Час події<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:100%; box-sizing:border-box;"></th>
         <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:100%; box-sizing:border-box;"></th>
         <th>Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:100%; box-sizing:border-box;"></th>
-        <th>Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:100%; box-sizing:border-box;"></th>
+        <th>Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:100%; box-sizing:border-box;"></th>
+        <th>Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:100%; box-sizing:border-box;"></th>
     </tr></thead><tbody>`;
 
     filteredEvents.forEach(ev => {
         let opColor = (ev.eventType.startsWith("1") || ev.eventType.startsWith("3")) ? "color:#15803d;" : "color:#b45309;";
-
         html += `<tr>
             <td style="font-weight:bold;">${formatDateOnly(ev.dateTime)}</td>
             <td>${formatTimeOnly(ev.dateTime)}</td>
             <td>${ev.flight}</td>
             <td style="font-weight:bold; color:#0369a1;">${ev.vehicle}</td>
+            <td style="font-weight:bold; color:#475569;">${ev.container || '—'}</td>
             <td style="font-weight:bold; ${opColor}">${ev.eventType}</td>
         </tr>`;
     });
     html += `</tbody></table>`;
     container.innerHTML = html;
     
-    attachFactLiveFilters('factEventsTable');
+    attachFactLiveFilters();
 }
 
-// ЗАУВАЖЕННЯ ВИПРАВЛЕНО: Наповнення Блоку 3 з текстовими фільтрами по колонках
+// ОБНОВЛЕННЫЙ БЛОК 3: Добавлена колонка Причина створення (data-col="1")
 function fillFlightsContent(yard) {
     const container = document.getElementById('factContentFlights');
     const allowedDates = getFactFilteredDates(yard);
@@ -652,31 +646,35 @@ function fillFlightsContent(yard) {
 
     let html = `<table id="factFlightsTable"><thead><tr>
         <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:70px;"></th>
-        <th>Порядок<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:40px;"></th>
-        <th>Маршрут<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:120px;"></th>
-        <th>Відомість<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:80px;"></th>
-        <th>ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:80px;"></th>
-        <th>Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:80px;"></th>
-        <th>Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="6" style="width:80px;"></th>
-        <th>1. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="7" style="width:60px;"></th>
-        <th>Початок скан.<br><input type="text" class="fact-col-filter filter-input" data-col="8" style="width:60px;"></th>
-        <th>Кінець скан.<br><input type="text" class="fact-col-filter filter-input" data-col="9" style="width:60px;"></th>
-        <th>2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="10" style="width:60px;"></th>
-        <th>Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="11" style="width:60px;"></th>
-        <th>Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="12" style="width:80px;"></th>
-        <th>Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="13" style="width:80px;"></th>
-        <th>Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="14" style="width:60px;"></th>
-        <th>3. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="15" style="width:60px;"></th>
-        <th>4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="16" style="width:60px;"></th>
+        <th>Причина створення<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:110px;"></th>
+        <th>Порядок<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:40px;"></th>
+        <th>Маршрут<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:120px;"></th>
+        <th>Відомість<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:80px;"></th>
+        <th>ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:80px;"></th>
+        <th>Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="6" style="width:80px;"></th>
+        <th>Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="7" style="width:80px;"></th>
+        <th>Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="8" style="width:80px;"></th>
+        <th>1. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="9" style="width:60px;"></th>
+        <th>Початок скан.<br><input type="text" class="fact-col-filter filter-input" data-col="10" style="width:60px;"></th>
+        <th>Кінець скан.<br><input type="text" class="fact-col-filter filter-input" data-col="11" style="width:60px;"></th>
+        <th>2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="12" style="width:60px;"></th>
+        <th>Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="13" style="width:60px;"></th>
+        <th>Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="14" style="width:80px;"></th>
+        <th>Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="15" style="width:80px;"></th>
+        <th>Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="16" style="width:60px;"></th>
+        <th>3. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="17" style="width:60px;"></th>
+        <th>4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="18" style="width:60px;"></th>
     </tr></thead><tbody>`;
 
     filtered.forEach(f => {
         html += `<tr>
             <td>${f.flight}</td>
+            <td style="color:#64748b; font-weight:500;">${f.reason}</td>
             <td style="text-align:center; font-weight:bold; color:#64748b;">${f.containerOrder}</td>
             <td class="col-route">${f.route}</td>
             <td>${f.statement}</td>
             <td style="font-weight:bold; color:#0369a1;">${f.vehicle}</td>
+            <td style="font-weight:bold; color:#475569;">${f.container || '—'}</td>
             <td>${f.yardA}</td><td>${f.nodeA}</td>
             <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedPlacement)}</td>
             <td>${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}</td>
@@ -692,90 +690,75 @@ function fillFlightsContent(yard) {
     html += `</tbody></table>`;
     container.innerHTML = html;
     
-    attachFactLiveFilters('factFlightsTable');
+    attachFactLiveFilters();
 }
 
-// Функція «живого» приховування рядків без втрати фокусу інпута
-function attachFactLiveFilters(tableId) {
-    const table = document.getElementById(tableId);
-    if (!table) return;
-    table.addEventListener('input', (e) => {
+// ПЕРЕРАССЧИТАННАЯ СИНХРОННАЯ ФИЛЬТРАЦИЯ (Индексы адаптированы под новые колонки)
+function attachFactLiveFilters() {
+    const wrapper = document.getElementById('factTableWrapper');
+    if (!wrapper || wrapper.dataset.filtersBound === 'true') return;
+    
+    wrapper.dataset.filtersBound = 'true';
+    
+    wrapper.addEventListener('input', (e) => {
         if (!e.target.classList.contains('fact-col-filter')) return;
-        const inputs = table.querySelectorAll('.fact-col-filter');
-        const rows = table.querySelectorAll('tbody tr');
         
-        rows.forEach(row => {
-            let keep = true;
-            inputs.forEach(input => {
-                const colIdx = parseInt(input.getAttribute('data-col'), 10);
-                const filterVal = input.value.trim().toLowerCase();
-                if (filterVal) {
-                    const cellText = row.children[colIdx].textContent.toLowerCase();
-                    if (!cellText.includes(filterVal)) {
+        const eventsTable = document.getElementById('factEventsTable');
+        const flightsTable = document.getElementById('factFlightsTable');
+
+        if (eventsTable && flightsTable) {
+            const evFlight = eventsTable.querySelector('.fact-col-filter[data-col="2"]'); // Рейс в Соб.
+            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="3"]'); // ТЗ в Соб.
+            
+            const flFlight = flightsTable.querySelector('.fact-col-filter[data-col="0"]'); // Рейс в Рейсах
+            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="5"]'); // ТЗ в Рейсах (теперь col 5)
+
+            if (e.target === evFlight && flFlight) flFlight.value = evFlight.value;
+            if (e.target === flFlight && evFlight) evFlight.value = flFlight.value;
+            if (e.target === evVehicle && flVehicle) flVehicle.value = evVehicle.value;
+            if (e.target === flVehicle && evVehicle) evVehicle.value = flVehicle.value;
+        }
+
+        if (eventsTable) {
+            const evInputs = eventsTable.querySelectorAll('.fact-col-filter');
+            eventsTable.querySelectorAll('tbody tr').forEach(row => {
+                let keep = true;
+                evInputs.forEach(input => {
+                    const colIdx = parseInt(input.getAttribute('data-col'), 10);
+                    const val = input.value.trim().toLowerCase();
+                    if (val && !row.children[colIdx].textContent.toLowerCase().includes(val)) {
                         keep = false;
                     }
-                }
+                });
+                row.style.display = keep ? '' : 'none';
             });
-            row.style.display = keep ? '' : 'none';
-        });
+        }
+
+        if (flightsTable) {
+            const flInputs = flightsTable.querySelectorAll('.fact-col-filter');
+            flightsTable.querySelectorAll('tbody tr').forEach(row => {
+                let keep = true;
+                flInputs.forEach(input => {
+                    const colIdx = parseInt(input.getAttribute('data-col'), 10);
+                    const val = input.value.trim().toLowerCase();
+                    if (val && !row.children[colIdx].textContent.toLowerCase().includes(val)) {
+                        keep = false;
+                    }
+                });
+                row.style.display = keep ? '' : 'none';
+            });
+        }
     });
-}
-
-// Наповнення Блоку 3: Реєстр рейсів
-function fillFlightsContent(yard) {
-    const container = document.getElementById('factContentFlights');
-    const allowedDates = getFactFilteredDates(yard);
-    
-    const filtered = actualFlightsData.filter(f => {
-        const isMatchYard = f.yardA === yard || f.yardB === yard;
-        const flightDateStr = formatDateOnly(f.calculatedPlacement);
-        return isMatchYard && allowedDates.includes(flightDateStr);
-    });
-
-    if (filtered.length === 0) {
-        container.innerHTML = "<p class='disabled'>Рейсів за обраний період не знайдено.</p>";
-        return;
-    }
-
-    let html = `<table><thead><tr>
-        <th>Рейс</th><th>Порядок</th><th>Маршрут</th><th>Відомість</th><th>ТЗ</th>
-        <th>Автодвір А</th><th>Вузол А</th><th>1. Постановка (Факт)</th><th>Початок скан.</th><th>Кінець скан.</th><th>2. Забір (Факт)</th><th>Виїзд</th>
-        <th>Автодвір Б</th><th>Вузол Б</th><th>Приїзд</th><th>3. Постановка (Факт)</th><th>4. Забір (Факт)</th>
-    </tr></thead><tbody>`;
-
-    filtered.forEach(f => {
-        html += `<tr>
-            <td>${f.flight}</td>
-            <td style="text-align:center; font-weight:bold; color:#64748b;">${f.containerOrder}</td>
-            <td class="col-route">${f.route}</td>
-            <td>${f.statement}</td>
-            <td style="font-weight:bold; color:#0369a1;">${f.vehicle}</td>
-            <td>${f.yardA}</td><td>${f.nodeA}</td>
-            <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedPlacement)}</td>
-            <td>${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}</td>
-            <td>${f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—'}</td>
-            <td style="color:#b45309; font-weight:bold;">${formatTimeOnly(f.calculatedRampLeave)}</td>
-            <td>${f.departureStr ? f.departureStr.split(' ')[1] : '—'}</td>
-            <td>${f.yardB}</td><td>${f.nodeB}</td>
-            <td>${f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—'}</td>
-            <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedUnloadStart)}</td>
-            <td style="color:#b45309; font-weight:bold;">${formatTimeOnly(f.calculatedUnloadEnd)}</td>
-        </tr>`;
-    });
-    html += `</tbody></table>`;
-    container.innerHTML = html;
 }
 
 async function loadSavedFactYardsList() {
     try {
         const response = await fetch(RESULTS_SCRIPT_URL + '?action=getFactYards');
         const data = await response.json();
-        
         if (data.yards && data.yards.length > 0) {
             const select = document.getElementById('factYardSelect');
             const currentVal = select.value;
             const existingYards = new Set(Array.from(select.options).map(o => o.value));
-            
             data.yards.forEach(y => {
                 if (!existingYards.has(y)) {
                     const opt = document.createElement('option');
@@ -786,9 +769,7 @@ async function loadSavedFactYardsList() {
             if (currentVal) select.value = currentVal;
             document.getElementById('factFileStatus').innerText = "Список збережених автодворів (Факт) підвантажено.";
         }
-    } catch (e) {
-        console.error("Помилка завантаження списку автодворів Факт:", e);
-    }
+    } catch (e) { console.error("Помилка списку автодворів Факт:", e); }
 }
 
 async function loadFactFromGoogle() {
@@ -797,80 +778,48 @@ async function loadFactFromGoogle() {
     const btn = document.getElementById('loadFactGoogleYardBtn');
     const originalText = btn.innerText;
     btn.innerText = "⏳...";
-
     try {
         const response = await fetch(`${RESULTS_SCRIPT_URL}?action=getFactAggregatedData&yard=${encodeURIComponent(yard)}`);
         const data = await response.json();
-
         if (data.savedRows && data.savedRows.length > 0) {
-            factCalculatedEvents = []; 
-            actualFlightsData = []; 
-            factOpsMatrix[yard] = {};
-
+            factCalculatedEvents = []; actualFlightsData = []; factOpsMatrix[yard] = {};
             data.savedRows.forEach(row => {
                 let [y, day, hour, fleetCountStr, ops] = row;
-                
                 let dayStr = String(day);
                 if (dayStr.includes('T') && dayStr.includes('Z')) {
                     const d = new Date(dayStr);
                     dayStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
                 }
-
                 if (!factOpsMatrix[yard][dayStr]) {
                     factOpsMatrix[yard][dayStr] = Array(24).fill(null).map(() => ({ total: 0, op1: 0, op2: 0, op3: 0, op4: 0 }));
                 }
-
-                factOpsMatrix[yard][dayStr][hour] = {
-                    total: parseInt(ops, 10) || 0,
-                    op1: 0, op2: 0, op3: 0, op4: 0
-                };
+                factOpsMatrix[yard][dayStr][hour] = { total: parseInt(ops, 10) || 0, op1: 0, op2: 0, op3: 0, op4: 0 };
             });
-
             renderFactDashboard();
             document.getElementById('factFileStatus').innerText = `Дані (Факт) ${yard} завантажені!`;
-        } else {
-            alert("Даних для цього автодвору не знайдено в базі.");
-        }
-    } catch (e) {
-        alert("Помилка завантаження з бази");
-        console.error(e);
-    } finally {
-        btn.innerText = originalText;
-    }
+        } else { alert("Даних для цього автодвору не знайдено в базі."); }
+    } catch (e) { alert("Помилка завантаження"); console.error(e); } finally { btn.innerText = originalText; }
 }
 
 async function saveFactToGoogle() {
     const yard = document.getElementById('factYardSelect').value;
     if (!yard) return alert("Оберіть автодвір!");
-
     const btn = document.getElementById('saveFactGoogleBtn');
     btn.innerText = "⏳ Збереження...";
-
     const days = getFactFilteredDates(yard);
-    if (days.length === 0) {
-        alert("Немає даних у вибраному періоді для збереження!");
-        btn.innerText = "Зберегти (поточний)";
-        return;
-    }
-
+    if (days.length === 0) { alert("Немає даних у вибраному періоді!"); btn.innerText = "Зберегти (поточний)"; return; }
     const { hourlyRequirements, totalK, totalM } = getFactFleetRequirements(yard, days);
     const aggregatedRows = [];
-
     days.forEach(day => {
         for (let h = 0; h < 24; h++) {
             const opsCount = (factOpsMatrix[yard] && factOpsMatrix[yard][day]) ? factOpsMatrix[yard][day][h].total : 0;
             const req = hourlyRequirements[day][h];
-            
             const kArr = Array(totalK).fill(0).map((_, i) => i < req.kamag ? 1 : 0);
             const mArr = Array(totalM).fill(0).map((_, i) => i < req.man ? 1 : 0);
             const stateString = `${kArr.join(',')}|${mArr.join(',')}`;
-
-            if (opsCount > 0 || req.kamag > 0 || req.man > 0) {
-                aggregatedRows.push([yard, day, h, stateString, opsCount]);
-            }
+            if (opsCount > 0 || req.kamag > 0 || req.man > 0) { aggregatedRows.push([yard, day, h, stateString, opsCount]); }
         }
     });
-
     try {
         await fetch(RESULTS_SCRIPT_URL, {
             method: 'POST',
@@ -878,54 +827,34 @@ async function saveFactToGoogle() {
             body: JSON.stringify({ action: 'saveFactAggregated', yard: yard, rows: aggregatedRows, dates: days })
         });
         btn.innerText = "✅ Збережено!";
-    } catch (e) {
-        btn.innerText = "❌ Помилка";
-    }
+    } catch (e) { btn.innerText = "❌ Помилка"; }
     setTimeout(() => btn.innerText = "Зберегти (поточний)", 3000);
 }
 
 async function saveAllFactToGoogle() {
     const yards = Object.keys(factOpsMatrix);
     if (yards.length === 0) return alert("Немає розрахованих даних для збереження!");
-
     const btn = document.getElementById('saveAllFactGoogleBtn');
-    btn.innerText = "⏳ Збереження...";
-    btn.disabled = true;
-
-    const aggregatedRows = [];
-    const allFilteredDays = new Set();
-
+    btn.innerText = "⏳ Збереження..."; btn.disabled = true;
+    const aggregatedRows = []; const allFilteredDays = new Set();
     yards.forEach(yard => {
         const days = getFactFilteredDates(yard);
-        
         if (days.length > 0) {
             const { hourlyRequirements, totalK, totalM } = getFactFleetRequirements(yard, days);
-            
             days.forEach(day => {
                 allFilteredDays.add(day);
                 for (let h = 0; h < 24; h++) {
                     const opsCount = (factOpsMatrix[yard] && factOpsMatrix[yard][day]) ? factOpsMatrix[yard][day][h].total : 0;
                     const req = hourlyRequirements[day][h];
-
                     const kArr = Array(totalK).fill(0).map((_, i) => i < req.kamag ? 1 : 0);
                     const mArr = Array(totalM).fill(0).map((_, i) => i < req.man ? 1 : 0);
                     const stateString = `${kArr.join(',')}|${mArr.join(',')}`;
-
-                    if (opsCount > 0 || req.kamag > 0 || req.man > 0) {
-                        aggregatedRows.push([yard, day, h, stateString, opsCount]);
-                    }
+                    if (opsCount > 0 || req.kamag > 0 || req.man > 0) { aggregatedRows.push([yard, day, h, stateString, opsCount]); }
                 }
             });
         }
     });
-
-    if (aggregatedRows.length === 0) {
-        alert("Немає розрахованих даних у вибраному періоді дат!");
-        btn.innerText = "Зберегти ВСІ";
-        btn.disabled = false;
-        return;
-    }
-
+    if (aggregatedRows.length === 0) { alert("Немає розрахованих даних!"); btn.innerText = "Зберегти ВСІ"; btn.disabled = false; return; }
     try {
         await fetch(RESULTS_SCRIPT_URL, {
             method: 'POST',
@@ -933,12 +862,6 @@ async function saveAllFactToGoogle() {
             body: JSON.stringify({ action: 'saveAllFactAggregated', yards: yards, rows: aggregatedRows, dates: Array.from(allFilteredDays) })
         });
         btn.innerText = "✅ Всі збережено!";
-    } catch (e) {
-        console.error(e);
-        btn.innerText = "❌ Помилка";
-    }
-    setTimeout(() => {
-        btn.innerText = "Зберегти ВСІ";
-        btn.disabled = false;
-    }, 3000);
+    } catch (e) { console.error(e); btn.innerText = "❌ Помилка"; }
+    setTimeout(() => { btn.innerText = "Зберегти ВСІ"; btn.disabled = false; }, 3000);
 }
