@@ -859,11 +859,16 @@ th.col-day .filter-input {
 }
 
 /* =========================================
-   ЗАКРІПЛЕННЯ ПЕРШОГО СТОВПЦЯ (ФЛОТ / ОПЕРАЦІЇ)
+   УНІВЕРСАЛЬНЕ ЗАКРІПЛЕННЯ ПЕРШОГО СТОВПЦЯ (ТЗ / ОПЕРАЦІЇ / ПАРАМЕТРИ)
    ========================================= */
 
 #kamagTableWrapper th:first-child,
-#kamagTableWrapper td:first-child {
+#kamagTableWrapper td:first-child,
+#factTableWrapper th:first-child,
+#factTableWrapper td:first-child,
+#rduTableWrapper th:first-child,
+#rduTableWrapper td:first-child,
+.sticky-col {
     position: sticky;
     left: 0;
     z-index: 10; /* Перекриває звичайні клітинки під час горизонтального скролу */
@@ -871,32 +876,53 @@ th.col-day .filter-input {
 }
 
 /* Кутова клітинка (перетин липкої шапки і липкого стовпця) має бути найвище */
-#kamagTableWrapper thead th:first-child {
+#kamagTableWrapper thead th:first-child,
+#factTableWrapper thead th:first-child,
+#rduTableWrapper thead th:first-child,
+th.sticky-col {
     z-index: 30; /* Перекриває і липку шапку (яка має z-index 20), і липкий край */
-    background-color: #f8f9fa; /* Збігається з кольором шапки */
+    background-color: #f8f9fa !important; /* Збігається з кольором шапки */
 }
 
 /* Суцільний білий фон для назв машинок, щоб під час скролу не просвічувались дані */
-#kamagTableWrapper tbody td:first-child {
-    background-color: #ffffff;
+#kamagTableWrapper tbody td:first-child,
+#factTableWrapper tbody td:first-child,
+#rduTableWrapper tbody td:first-child,
+td.sticky-col {
+    background-color: #ffffff !important;
 }
 
-/* Підтримка підсвічування закріпленого рядка при наведенні мишки */
-#kamagTableWrapper tbody tr:hover td:first-child {
-    background-color: #f8f9fa !important;
+/* Для матриць використовуємо фільтр затемнення, щоб НЕ втрачати кольори квадратиків */
+#kamagTableWrapper tbody tr:hover td,
+#factTableWrapper tbody tr:hover td,
+#rduTableWrapper tbody tr:hover td,
+#compareTableWrapper tbody tr:hover td {
+    filter: brightness(0.92); 
+    transition: filter 0.1s ease;
 }
+
+/* Лівий закріплений стовпець при ховері робимо класичним світло-сірим */
+#kamagTableWrapper tbody tr:hover td:first-child,
+#factTableWrapper tbody tr:hover td:first-child,
+#rduTableWrapper tbody tr:hover td:first-child,
+#compareTableWrapper tbody tr:hover td.sticky-col {
+    background-color: #f1f3f5 !important;
+    filter: none; /* Відміняємо затемнення тексту */
+}
+
 /* =========================================
-   ЗАКРІПЛЕННЯ ЗАГОЛОВКІВ ("Флот", "Операції")
+   ЗАКРІПЛЕННЯ ЗАГОЛОВКІВ ТА ПАНЕЛЕЙ
    ========================================= */
-#kamagTableWrapper h3 {
+#kamagTableWrapper h3,
+#factTableWrapper h3,
+#compareTableWrapper h3 {
     position: sticky;
     left: 0;
     width: max-content; /* Щоб заголовок не розтягувався на всю ширину скролу */
-    background-color: #fff; /* Колір фону сторінки, щоб скрол не просвічувався */
+    background-color: #fff; /* Колір фону сторінки, щоб скрол не просвічувалися дані */
     z-index: 40; /* Робимо його вище за таблицю */
-    padding-right: 20px; /* Трохи відступу справа, щоб текст не прилипав до даних, що ховаються */
+    padding-right: 20px; /* Відступ справа, щоб текст не прилипав до даних */
 }
-
 /* =========================================
    ВИПАДАЮЧА ЛЕГЕНДА КОЛЬОРІВ
    ========================================= */

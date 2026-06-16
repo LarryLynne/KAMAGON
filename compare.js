@@ -230,7 +230,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     const totalCols = 1 + (datesList.length * 26) + 2; 
 
     let html = `<h3 style="margin: 5px 0; color: #334155; border-left: 4px solid #ea580c; padding-left: 10px;">Порівняльна матриця роботи ТЗ</h3>
-    <table><thead><tr><th style="min-width: 150px;" rowspan="2">ТЗ / Стан</th>`;
+    <table><thead><tr><th class="sticky-col" style="min-width: 150px;" rowspan="2">ТЗ / Стан</th>`;
     
     datesList.forEach(dStr => {
         html += `<th colspan="26" style="text-align: center; font-weight: bold; background-color: #e9ecef; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d; padding: 4px 0;">${dStr}</th>`;
@@ -249,7 +249,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
 
     // Рендерим строки машин
     vehicleRows.forEach(v => {
-        html += `<tr><td style="font-weight:bold; background-color:#fff;">${v}</td>`;
+        html += `<tr><td class="sticky-col" style="font-weight:bold; background-color:#fff;">${v}</td>`;
         let grandPlanHours = 0;
         let grandRduHours = 0;
 
@@ -297,7 +297,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     });
 
     // Строка с графиками внутри основной таблицы
-    html += `<tr><td style="font-weight:bold; background-color:#fff; vertical-align: middle;">Графік роботи</td>`;
+    html += `<tr><td class="sticky-col" style="font-weight:bold; background-color:#fff; vertical-align: middle;">Графік роботи</td>`;
     datesList.forEach((dStr, index) => {
         html += `<td colspan="26" style="padding: 0; background: #fff; vertical-align: bottom; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d;">
             <div style="height: 220px; width: 100%;">
@@ -314,7 +314,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     </td></tr>`;
     
     // Дублирующие подзаголовки часов (чтобы перед глазами была сетка)
-    html += `<tr style="background-color: #f8fafc;"><th style="min-width: 150px; text-align: left;" rowspan="2">Параметр / Години</th>`;
+    html += `<tr style="background-color: #f8fafc;"><th class="sticky-col" style="min-width: 150px; text-align: left;" rowspan="2">Параметр / Години</th>`;
     datesList.forEach(dStr => {
         html += `<th colspan="26" style="text-align: center; font-weight: bold; background-color: #f8fafc; border-left: 2px solid #6c757d; border-right: 2px solid #6c757d; padding: 4px 0;">${dStr}</th>`;
     });
@@ -329,7 +329,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     html += `</tr>`;
     
     // 1. Строка: План
-    html += `<tr><td style="font-weight:bold; background-color:#fff;">Операції (План)</td>`;
+    html += `<tr><td class="sticky-col" style="font-weight:bold; background-color:#fff;">Операції (План)</td>`;
     let grandPlanOps = 0;
     datesList.forEach(dStr => {
         let daySum = 0;
@@ -345,7 +345,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     html += `<td colspan="2" style="text-align:center; font-weight:bold; background-color:#cbd5e1;">${grandPlanOps || '0'}</td></tr>`;
     
     // 2. Строка: Факт
-    html += `<tr><td style="font-weight:bold; background-color:#fff;">Операції (Факт)</td>`;
+    html += `<tr><td class="sticky-col" style="font-weight:bold; background-color:#fff;">Операції (Факт)</td>`;
     let grandFactOps = 0;
     datesList.forEach(dStr => {
         let daySum = 0;
@@ -361,7 +361,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     html += `<td colspan="2" style="text-align:center; font-weight:bold; background-color:#cbd5e1;">${grandFactOps || '0'}</td></tr>`;
     
     // 3. Строка: Разница
-    html += `<tr><td style="font-weight:bold; background-color:#fff;">Різниця (Ф - П)</td>`;
+    html += `<tr><td class="sticky-col" style="font-weight:bold; background-color:#fff;">Різниця (Ф - П)</td>`;
     let grandDiffOps = 0;
     datesList.forEach(dStr => {
         let daySum = 0;
