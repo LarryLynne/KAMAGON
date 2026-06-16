@@ -769,7 +769,8 @@ function switchTab(activeTabBtn, activeContainer) {
 
     const exportModeSelect = document.getElementById('exportModeSelect');
     if (exportModeSelect) {
-        if (activeTabBtn === tabKamag) {
+        // Показуємо вибір режимів на вкладках Розрахунок, Факт та Результати
+        if (activeTabBtn === tabKamag || activeTabBtn === document.getElementById('tabFact') || activeTabBtn === tabCompare) {
             exportModeSelect.classList.remove('hidden');
         } else {
             exportModeSelect.classList.add('hidden');
@@ -1816,28 +1817,28 @@ document.addEventListener('input', function(e) {
     }
 });
 
+// --- Повністю замінити обробник exportExcelBtn в самому кінці app.js ---
 document.getElementById('exportExcelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('exportExcelBtn');
     const originalText = btn.innerText;
-    //btn.innerText = "⏳ Формування...";
     btn.disabled = true;
 
     try {
         const workbook = new ExcelJS.Workbook();
+        
         if (tabCompare.classList.contains('active')) {
             if (typeof window.exportCompareToExcel === 'function') {
-                await window.exportCompareToExcel(workbook);
+                const success = await window.exportCompareToExcel(workbook);
+                if (!success) { btn.innerText = originalText; btn.disabled = false; return; }
             } else {
-                alert("Немає розрахованих даних для експорту звірки!");
+                alert("Модуль експорту звірки не знайдено!");
                 btn.innerText = originalText; btn.disabled = false; return;
             }
         }
         else if (document.getElementById('tabFact').classList.contains('active')) {
             if (typeof window.exportFactToExcel === 'function') {
                 const success = await window.exportFactToExcel(workbook);
-                if (!success) {
-                    btn.innerText = originalText; btn.disabled = false; return;
-                }
+                if (!success) { btn.innerText = originalText; btn.disabled = false; return; }
             } else {
                 alert("Модуль експорту Факту не знайдено!");
                 btn.innerText = originalText; btn.disabled = false; return;
@@ -2008,7 +2009,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 }
                 sheet.addRow([]);
 
-                const excelOpsConfig = ["Всього операцій", "Задіяно фіз. КАМАГ", "Задіяно вірт. КАМАГ", "Задіяно фіз. МАН", "Задіяно вірт. МАН", "Непокриті (фіз. флот)", "Непокриті (залишок)"];
+                const excelOpsConfig = ["Всього операцій", "Задіяно фіз. КАМАГ", "Задіяно вірт. ЛЕГ", "Задіяно фіз. МАН", "Задіяно вірт. МАН", "Непокриті (фіз. флот)", "Непокриті (залишок)"];
                 excelOpsConfig.forEach(rowName => {
                     const row = sheet.addRow([rowName]); row.getCell(1).font = { bold: true, size: 10 };
                     let weekTotal = 0, oCol = 2;
@@ -2063,8 +2064,16 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 for(let i=0; i<6; i++) sheet.addRow([]); 
             });
         }
+        
+        // === ТЕПЕР saveAs ЗНАХОДИТЬСЯ ТУТ (ВИЛИП ІЗ ТАБКАМАГ) І ПРАЦЮЄ ДЛЯ ВСІХ ВКЛАДОК ===
         saveAs(new Blob([await workbook.xlsx.writeBuffer()]), `Kamagon_Export_${new Date().getTime()}.xlsx`);
-    } catch (err) { console.error(err); alert("Помилка при експорті!"); } finally { btn.innerText = originalText; btn.disabled = false; }
+    } catch (err) { 
+        console.error(err); 
+        alert("Помилка при експорті!"); 
+    } finally { 
+        btn.innerText = originalText; 
+        btn.disabled = false; 
+    }
 });
 
 // СОХРАНЕНИЕ ТЕКУЩЕГО ДВОРА

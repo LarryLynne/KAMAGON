@@ -17,47 +17,43 @@
             <div id="loginBtn" class="login-info">Увійти</div>
         </div>
 
-        <div class="global-controls">
-            <label for="fileInput" class="file-label auth-hidden" id="fileInputLabel">
-                Вибрати файли
-            </label>
-            <input type="file" id="fileInput" multiple accept=".xlsx, .xls" style="display: none;">
-            
-            <span id="fileStatus">Завантаження...</span>
-
-            <div id="progressContainer" class="progress-container" style="display: none;">
-                <div id="progressBar" class="progress-bar"></div>
-            </div>
-
-            <div class="export-group">
-                <select id="exportModeSelect" class="export-mode-select hidden">
-                    <option value="all">Усі автодвори</option>
-                    <option value="current">Поточний автодвір</option>
-                </select>
-                
-                <button id="exportExcelBtn" class="tab-btn btn-action btn-export">
-                    Експорт в Excel
-                </button>
-            </div>
-        </div>
-
         <div class="tabs">
             <button class="tab-btn auth-hidden" id="tabRaw">Графіки</button>
             <button class="tab-btn auth-hidden" id="tabDetailed">Рейси контейнерів</button>
             <button class="tab-btn auth-hidden" id="tabEvents">Події</button>
             <button class="tab-btn active" id="tabKamag">Розрахунок</button>
-            <button class="tab-btn auth-hidden" id="tabFact">Розрахунок (Факт)</button>
+            <button class="tab-btn auth-hidden" id="tabFact">Розрахунок (Fact)</button>
             <button class="tab-btn auth-hidden" id="tabRdu">Робоче місце РДУ</button>
             <button class="tab-btn auth-hidden" id="tabCompare">Результати</button>
+
+            <div class="export-group" style="margin-left: auto; display: flex; gap: 8px; align-items: center; padding-right: 20px;">
+                <select id="exportModeSelect" class="export-mode-select hidden">
+                    <option value="all">Усі автодвори</option>
+                    <option value="current">Поточний автодвір</option>
+                </select>
+                <button id="exportExcelBtn" class="tab-btn btn-action btn-export" style="margin: 0; height: 34px;">
+                    Експорт в Excel
+                </button>
+            </div>
         </div>
     </div>
 
     <div class="main-content">
         <div id="tableContainerRaw" class="table-container" style="display: none;">
             <div class="tab-controls-panel">
-                <!-- <button id="togglePtBtn">Пром. точки</button> -->
-                <button id="unknownRoutesBtn">Невідомі маршрути</button>
-                 <a href="https://docs.google.com/spreadsheets/d/1Pjp5PP1sCR5R9MORAG9JmgcPG4y0q955vJ-T8FajAXs/edit?gid=0#gid=0" target="_blank" class="settings-btn">
+                <label for="fileInput" class="file-label auth-hidden" id="fileInputLabel" style="margin: 0;">
+                    Вибрати файли
+                </label>
+                <input type="file" id="fileInput" multiple accept=".xlsx, .xls" style="display: none;">
+                
+                <span id="fileStatus">Готово.</span>
+
+                <div id="progressContainer" class="progress-container" style="display: none; margin: 0;">
+                    <div id="progressBar" class="progress-bar"></div>
+                </div>
+                
+                <div style="border-left: 1px solid #dee2e6; height: 24px; margin: 0 4px;"></div> <button id="unknownRoutesBtn">Невідомі маршрути</button>
+                <a href="https://docs.google.com/spreadsheets/d/1Pjp5PP1sCR5R9MORAG9JmgcPG4y0q955vJ-T8FajAXs/edit?gid=0#gid=0" target="_blank" class="settings-btn">
                     Налаштування
                 </a>
                 <button id="updateDictBtn">Оновити довідник</button>

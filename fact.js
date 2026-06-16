@@ -198,7 +198,7 @@ function processFactData(text) {
 
         rawRows.push({
             flight: cols[0], 
-            reason: cols[1] || '—', // Запись причины
+            reason: cols[1] || '—', 
             route: cols[2], 
             statement: cols[3],
             startLoadStr: cols[4], 
@@ -242,15 +242,21 @@ function processFactData(text) {
             row.yardB = yardBConfig ? yardBConfig.yard : "Невідомий автодвір";
             row.containerOrder = containerOrder;
 
+            // Считываем настройки нормативов и буферов
             let normPlacementBufferA = yardAConfig ? (yardAConfig.factPlacementBuffer || 0) : 0;
-            let normLeaveBufferA = yardAConfig ? (yardAConfig.factLeaveBuffer || 0) : 0;
+            let normFirstContainerBufferA = yardAConfig ? (yardAConfig.factFirstContainerBuffer || 0) : 0;
 
+            // 1. Постановка на Автодворе А (всегда от Почала сканування назад)
             const dPlacementA = dStartLoad ? modifyMinutes(dStartLoad, -normPlacementBufferA) : null;
-            const dRampLeaveA = dDeparture ? modifyMinutes(dDeparture, -normLeaveBufferA) : null;
+            
+            // 2. Забор на Автодворе А (Универсальная логика для всех контейнеров)
+            // Теперь строго: Конец сканирования конкретного контейнера + норматив из колонки P
+            const dRampLeaveA = dEndLoad ? modifyMinutes(dEndLoad, normFirstContainerBufferA) : null;
 
             row.calculatedPlacement = dPlacementA;
             row.calculatedRampLeave = dRampLeaveA;
 
+            // Расчет нормативов для Автодвора Б (Прибытие)
             let normPrepB = 0;
             let normUnloadB = 0;
             if (yardBConfig) {
@@ -266,7 +272,7 @@ function processFactData(text) {
 
             actualFlightsData.push(row);
 
-            // Добавление номера контейнера в рассчитываемые события
+            // Логирование событий и накопление матрицы операций
             if (row.yardA !== "Невідомий автодвір") {
                 if (dPlacementA) {
                     factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
@@ -291,6 +297,7 @@ function processFactData(text) {
         });
     }
 
+    // Финальная сортировка массива событий по времени
     factCalculatedEvents.sort((a, b) => a.dateTime.getTime() - b.dateTime.getTime());
 }
 
@@ -391,9 +398,20 @@ function fillCalculatedFleetMatrix(yard) {
 
     const { hourlyRequirements, totalK, totalM, yardNorms } = getFactFleetRequirements(yard, dates);
 
+    // СЛОВАРЬ ДНЕЙ НЕДЕЛИ
+    const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
     let html = `<table class="kamag-table"><thead><tr><th style="min-width: 140px;">ТЗ / Години</th>`;
+    
+    // ДОБАВЛЯЕМ ДЕНЬ НЕДЕЛИ В ЦИКЛ ВЫВОДА ДАТ
     dates.forEach(d => {
-        html += `<th colspan="25" style="text-align:center; font-weight:bold; background-color:#e9ecef; border-left:2px solid #6c757d; border-right:2px solid #6c757d;">${d}</th>`;
+        const [dd, mm, yyyy] = d.split('.').map(Number);
+        const dateObj = new Date(yyyy, mm - 1, dd);
+        const dayName = dayNamesShort[dateObj.getDay()];
+
+        html += `<th colspan="25" style="text-align:center; font-weight:bold; background-color:#e9ecef; border-left:2px solid #6c757d; border-right:2px solid #6c757d; padding: 4px 0;">
+            ${d}<br><span style="font-size: 11px; font-weight: normal; color: #6c757d;">${dayName}</span>
+        </th>`;
     });
     html += `<th style="text-align:center;">Всього, год</th></tr><tr><th></th>`;
     dates.forEach(() => {
@@ -603,17 +621,19 @@ function fillEventsContent(yard) {
     }
 
     let html = `<table id="factEventsTable"><thead><tr>
-        <th>День<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:100%; box-sizing:border-box;"></th>
-        <th>Час події<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:100%; box-sizing:border-box;"></th>
-        <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:100%; box-sizing:border-box;"></th>
-        <th>Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:100%; box-sizing:border-box;"></th>
-        <th>Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:100%; box-sizing:border-box;"></th>
-        <th>Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:100%; box-sizing:border-box;"></th>
+        <th>Автодвір<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:100%; box-sizing:border-box;"></th>
+        <th>День<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:100%; box-sizing:border-box;"></th>
+        <th>Час події<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:100%; box-sizing:border-box;"></th>
+        <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:100%; box-sizing:border-box;"></th>
+        <th>Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:100%; box-sizing:border-box;"></th>
+        <th>Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:100%; box-sizing:border-box;"></th>
+        <th>Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="6" style="width:100%; box-sizing:border-box;"></th>
     </tr></thead><tbody>`;
 
     filteredEvents.forEach(ev => {
         let opColor = (ev.eventType.startsWith("1") || ev.eventType.startsWith("3")) ? "color:#15803d;" : "color:#b45309;";
         html += `<tr>
+            <td style="font-weight:bold; color:#475569;">${ev.yard}</td>
             <td style="font-weight:bold;">${formatDateOnly(ev.dateTime)}</td>
             <td>${formatTimeOnly(ev.dateTime)}</td>
             <td>${ev.flight}</td>
@@ -693,7 +713,7 @@ function fillFlightsContent(yard) {
     attachFactLiveFilters();
 }
 
-// ПЕРЕРАССЧИТАННАЯ СИНХРОННАЯ ФИЛЬТРАЦИЯ (Индексы адаптированы под новые колонки)
+// === ПОВНІСТЮ ЗАМІНИТИ ФУНКЦІЮ attachFactLiveFilters У fact.js ===
 function attachFactLiveFilters() {
     const wrapper = document.getElementById('factTableWrapper');
     if (!wrapper || wrapper.dataset.filtersBound === 'true') return;
@@ -707,11 +727,12 @@ function attachFactLiveFilters() {
         const flightsTable = document.getElementById('factFlightsTable');
 
         if (eventsTable && flightsTable) {
-            const evFlight = eventsTable.querySelector('.fact-col-filter[data-col="2"]'); // Рейс в Соб.
-            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="3"]'); // ТЗ в Соб.
+            // ІСПРАВЛЕНО: Зсунуті індекси через нову колонку (Рейс тепер col 3, ТЗ тепер col 4)
+            const evFlight = eventsTable.querySelector('.fact-col-filter[data-col="3"]'); 
+            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="4"]'); 
             
-            const flFlight = flightsTable.querySelector('.fact-col-filter[data-col="0"]'); // Рейс в Рейсах
-            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="5"]'); // ТЗ в Рейсах (теперь col 5)
+            const flFlight = flightsTable.querySelector('.fact-col-filter[data-col="0"]'); 
+            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="5"]'); 
 
             if (e.target === evFlight && flFlight) flFlight.value = evFlight.value;
             if (e.target === flFlight && evFlight) evFlight.value = flFlight.value;
@@ -750,7 +771,6 @@ function attachFactLiveFilters() {
         }
     });
 }
-
 async function loadSavedFactYardsList() {
     try {
         const response = await fetch(RESULTS_SCRIPT_URL + '?action=getFactYards');
@@ -866,96 +886,117 @@ async function saveAllFactToGoogle() {
     setTimeout(() => { btn.innerText = "Зберегти ВСІ"; btn.disabled = false; }, 3000);
 }
 
-// === Добавить в самый конец файла fact.js ===
+
 window.exportFactToExcel = async function(workbook) {
-    const yard = document.getElementById('factYardSelect').value;
-    if (!yard) {
-        alert("Оберіть автодвір!");
+    const exportMode = document.getElementById('exportModeSelect').value;
+    let yardsToExport = [];
+
+    if (exportMode === 'current') {
+        const currentYard = document.getElementById('factYardSelect').value;
+        if (currentYard) yardsToExport.push(currentYard);
+    } else {
+        yardsToExport = Object.keys(factOpsMatrix).sort();
+    }
+
+    if (yardsToExport.length === 0) {
+        alert("Немає автодворів для експорту!");
         return false;
     }
 
-    const allowedDates = getFactFilteredDates(yard);
-    if (allowedDates.length === 0) {
-        alert("Немає розрахованих даних у вибраному періоді!");
+    let hasData = false;
+    for (const yard of yardsToExport) {
+        const allowedDates = getFactFilteredDates(yard);
+        if (allowedDates.length === 0) continue;
+
+        const hasFlights = actualFlightsData.some(f => 
+            (f.yardA === yard || f.yardB === yard) && allowedDates.includes(formatDateOnly(f.calculatedPlacement))
+        );
+        const hasEvents = factCalculatedEvents.some(ev => 
+            ev.yard === yard && allowedDates.includes(formatDateOnly(ev.dateTime))
+        );
+
+        if (hasFlights || hasEvents) { hasData = true; break; }
+    }
+
+    if (!hasData) {
+        alert("Немає розрахованих даних (Факт) для експорту за обраний період!");
         return false;
     }
 
-    // Фильтруем рейсы и события по выбранному двору и датам
-    const filteredFlights = actualFlightsData.filter(f => {
-        const isMatchYard = f.yardA === yard || f.yardB === yard;
-        const flightDateStr = formatDateOnly(f.calculatedPlacement);
-        return isMatchYard && allowedDates.includes(flightDateStr);
-    });
-
-    const filteredEvents = factCalculatedEvents.filter(ev => 
-        ev.yard === yard && allowedDates.includes(formatDateOnly(ev.dateTime))
-    );
-
-    if (filteredFlights.length === 0 && filteredEvents.length === 0) {
-        alert("Немає даних для експорту (можливо, CSV-файл не був завантажений)!");
-        return false;
-    }
-
-    // Стили для шапки таблиц
     const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9ECEF' } };
     const alignCenter = { vertical: 'middle', horizontal: 'center' };
 
-    // 1. ФОРМИРУЕМ ЛИСТ РЕЙСОВ
+    // Створюємо рівно два майстер-листи для накопичення даних
     const sheetFlights = workbook.addWorksheet('Рейси (Факт)');
     const flightHeaders = [
-        "Рейс", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер",
+        "Автодвір (Аналітика)", "Рейс", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер",
         "Автодвір А", "Вузол А", "1. Постановка", "Початок скан.", "Кінець скан.", "2. Забір", "Виїзд",
         "Автодвір Б", "Вузол Б", "Приїзд", "3. Постановка", "4. Забір"
     ];
-    
     const headerRowF = sheetFlights.addRow(flightHeaders);
     headerRowF.font = { bold: true };
     headerRowF.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
 
-    filteredFlights.forEach(f => {
-        sheetFlights.addRow([
-            f.flight,
-            f.reason,
-            f.containerOrder,
-            f.route,
-            f.statement,
-            f.vehicle,
-            f.container || '—',
-            f.yardA,
-            f.nodeA,
-            formatTimeOnly(f.calculatedPlacement),
-            f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—',
-            f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—',
-            formatTimeOnly(f.calculatedRampLeave),
-            f.departureStr ? f.departureStr.split(' ')[1] : '—',
-            f.yardB,
-            f.nodeB,
-            f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—',
-            formatTimeOnly(f.calculatedUnloadStart),
-            formatTimeOnly(f.calculatedUnloadEnd)
-        ]);
-    });
-    sheetFlights.columns.forEach(col => col.width = 15); // Базовая ширина колонок рейсов
-
-    // 2. ФОРМИРУЕМ ЛИСТ СОБЫТИЙ
     const sheetEvents = workbook.addWorksheet('Події (Факт)');
-    const eventHeaders = ["День", "Час події", "Рейс", "Номер ТЗ", "Контейнер", "Назва операції"];
-    
+    const eventHeaders = ["Автодвір (Аналітика)", "День", "Час події", "Рейс", "Номер ТЗ", "Контейнер", "Назва операції"];
     const headerRowE = sheetEvents.addRow(eventHeaders);
     headerRowE.font = { bold: true };
     headerRowE.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
 
-    filteredEvents.forEach(ev => {
-        sheetEvents.addRow([
-            formatDateOnly(ev.dateTime),
-            formatTimeOnly(ev.dateTime),
-            ev.flight,
-            ev.vehicle,
-            ev.container || '—',
-            ev.eventType
-        ]);
-    });
-    sheetEvents.columns.forEach(col => col.width = 16); // Базовая ширина колонок событий
+    for (const yard of yardsToExport) {
+        const allowedDates = getFactFilteredDates(yard);
+        if (allowedDates.length === 0) continue;
+
+        const filteredFlights = actualFlightsData.filter(f => {
+            const isMatchYard = f.yardA === yard || f.yardB === yard;
+            const flightDateStr = formatDateOnly(f.calculatedPlacement);
+            return isMatchYard && allowedDates.includes(flightDateStr);
+        });
+
+        const filteredEvents = factCalculatedEvents.filter(ev => 
+            ev.yard === yard && allowedDates.includes(formatDateOnly(ev.dateTime))
+        );
+
+        filteredFlights.forEach(f => {
+            sheetFlights.addRow([
+                yard, 
+                f.flight,
+                f.reason,
+                f.containerOrder,
+                f.route,
+                f.statement,
+                f.vehicle,
+                f.container || '—',
+                f.yardA,
+                f.nodeA,
+                formatTimeOnly(f.calculatedPlacement),
+                f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—',
+                f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—',
+                formatTimeOnly(f.calculatedRampLeave),
+                f.departureStr ? f.departureStr.split(' ')[1] : '—',
+                f.yardB,
+                f.nodeB,
+                f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—',
+                formatTimeOnly(f.calculatedUnloadStart),
+                formatTimeOnly(f.calculatedUnloadEnd)
+            ]);
+        });
+
+        filteredEvents.forEach(ev => {
+            sheetEvents.addRow([
+                yard, 
+                formatDateOnly(ev.dateTime),
+                formatTimeOnly(ev.dateTime),
+                ev.flight,
+                ev.vehicle,
+                ev.container || '—',
+                ev.eventType
+            ]);
+        });
+    }
+
+    sheetFlights.columns.forEach(col => col.width = 16);
+    sheetEvents.columns.forEach(col => col.width = 16);
 
     return true;
 };

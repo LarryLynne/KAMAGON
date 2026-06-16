@@ -107,14 +107,14 @@ body {
 .tab-controls-panel {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start; /* Выравниваем элементы по левому краю */
     gap: 12px;
-    padding: 10px;
+    padding: 10px 20px;
     background: #f8f9fa;
     border-bottom: 1px solid #dee2e6;
     position: sticky;
     top: 0;
-    z-index: 30; /* Выше чем th таблицы */
+    z-index: 30;
 }
 
 /* Чтобы шапка таблицы на первой вкладке прилипала ПОД панелью (высота панели ~54px) */
@@ -185,7 +185,8 @@ body {
 /* Вкладки */
 .tabs {
     display: flex;
-    padding: 0 20px;
+    align-items: center; /* Центрируем вкладки и кнопку экспорта по вертикали */
+    padding: 0;
     background: #f1f3f5;
     border-bottom: 1px solid #dee2e6;
 }
@@ -864,8 +865,8 @@ th.col-day .filter-input {
 
 #kamagTableWrapper th:first-child,
 #kamagTableWrapper td:first-child,
-#factTableWrapper th:first-child,
-#factTableWrapper td:first-child,
+#factContentMatrix th:first-child, /* ІСПРАВЛЕНО: тільки для матриці розрахунку факту */
+#factContentMatrix td:first-child, /* ІСПРАВЛЕНО: тільки для матриці розрахунку факту */
 #rduTableWrapper th:first-child,
 #rduTableWrapper td:first-child,
 .sticky-col {
@@ -877,33 +878,24 @@ th.col-day .filter-input {
 
 /* Кутова клітинка (перетин липкої шапки і липкого стовпця) має бути найвище */
 #kamagTableWrapper thead th:first-child,
-#factTableWrapper thead th:first-child,
+#factContentMatrix thead th:first-child, /* ІСПРАВЛЕНО */
 #rduTableWrapper thead th:first-child,
 th.sticky-col {
-    z-index: 30; /* Перекриває і липку шапку (яка має z-index 20), і липкий край */
+    z-index: 30; /* Перекриває і липку шапку, і липкий край */
     background-color: #f8f9fa !important; /* Збігається з кольором шапки */
 }
 
 /* Суцільний білий фон для назв машинок, щоб під час скролу не просвічувались дані */
 #kamagTableWrapper tbody td:first-child,
-#factTableWrapper tbody td:first-child,
+#factContentMatrix tbody td:first-child, /* ІСПРАВЛЕНО */
 #rduTableWrapper tbody td:first-child,
 td.sticky-col {
     background-color: #ffffff !important;
 }
 
-/* Для матриць використовуємо фільтр затемнення, щоб НЕ втрачати кольори квадратиків */
-#kamagTableWrapper tbody tr:hover td,
-#factTableWrapper tbody tr:hover td,
-#rduTableWrapper tbody tr:hover td,
-#compareTableWrapper tbody tr:hover td {
-    filter: brightness(0.92); 
-    transition: filter 0.1s ease;
-}
-
 /* Лівий закріплений стовпець при ховері робимо класичним світло-сірим */
 #kamagTableWrapper tbody tr:hover td:first-child,
-#factTableWrapper tbody tr:hover td:first-child,
+#factContentMatrix tbody tr:hover td:first-child, /* ІСПРАВЛЕНО */
 #rduTableWrapper tbody tr:hover td:first-child,
 #compareTableWrapper tbody tr:hover td.sticky-col {
     background-color: #f1f3f5 !important;
@@ -1192,9 +1184,13 @@ td.sticky-col {
 .fact-accordion-content table {
     border-top: none;
     margin-top: 0;
+    border-collapse: collapse; /* Захист від мікрозсувів меж */
 }
 
 .fact-accordion-content table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 20; 
     background-color: #f1f5f9; /* Дефолтний фон для звичайних таблиць рейсів та подій */
     box-shadow: inset 0 -1px 0 #cbd5e1, inset 0 1px 0 #cbd5e1; /* Зберігаємо рамки при ліпленні */
 }
