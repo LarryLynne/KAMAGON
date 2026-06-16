@@ -1832,6 +1832,17 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 btn.innerText = originalText; btn.disabled = false; return;
             }
         }
+        else if (document.getElementById('tabFact').classList.contains('active')) {
+            if (typeof window.exportFactToExcel === 'function') {
+                const success = await window.exportFactToExcel(workbook);
+                if (!success) {
+                    btn.innerText = originalText; btn.disabled = false; return;
+                }
+            } else {
+                alert("Модуль експорту Факту не знайдено!");
+                btn.innerText = originalText; btn.disabled = false; return;
+            }
+        }
         else if (tabRaw.classList.contains('active')) {
             const headers = ["Маршрут", "Дедлайн", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд", "Початкова", "Приїзд", "Виїзд"];
             for(let i=1; i<=10; i++) headers.push(`П.Т. №${i}`, "Приїзд", "Виїзд");

@@ -865,3 +865,97 @@ async function saveAllFactToGoogle() {
     } catch (e) { console.error(e); btn.innerText = "❌ Помилка"; }
     setTimeout(() => { btn.innerText = "Зберегти ВСІ"; btn.disabled = false; }, 3000);
 }
+
+// === Добавить в самый конец файла fact.js ===
+window.exportFactToExcel = async function(workbook) {
+    const yard = document.getElementById('factYardSelect').value;
+    if (!yard) {
+        alert("Оберіть автодвір!");
+        return false;
+    }
+
+    const allowedDates = getFactFilteredDates(yard);
+    if (allowedDates.length === 0) {
+        alert("Немає розрахованих даних у вибраному періоді!");
+        return false;
+    }
+
+    // Фильтруем рейсы и события по выбранному двору и датам
+    const filteredFlights = actualFlightsData.filter(f => {
+        const isMatchYard = f.yardA === yard || f.yardB === yard;
+        const flightDateStr = formatDateOnly(f.calculatedPlacement);
+        return isMatchYard && allowedDates.includes(flightDateStr);
+    });
+
+    const filteredEvents = factCalculatedEvents.filter(ev => 
+        ev.yard === yard && allowedDates.includes(formatDateOnly(ev.dateTime))
+    );
+
+    if (filteredFlights.length === 0 && filteredEvents.length === 0) {
+        alert("Немає даних для експорту (можливо, CSV-файл не був завантажений)!");
+        return false;
+    }
+
+    // Стили для шапки таблиц
+    const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9ECEF' } };
+    const alignCenter = { vertical: 'middle', horizontal: 'center' };
+
+    // 1. ФОРМИРУЕМ ЛИСТ РЕЙСОВ
+    const sheetFlights = workbook.addWorksheet('Рейси (Факт)');
+    const flightHeaders = [
+        "Рейс", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер",
+        "Автодвір А", "Вузол А", "1. Постановка", "Початок скан.", "Кінець скан.", "2. Забір", "Виїзд",
+        "Автодвір Б", "Вузол Б", "Приїзд", "3. Постановка", "4. Забір"
+    ];
+    
+    const headerRowF = sheetFlights.addRow(flightHeaders);
+    headerRowF.font = { bold: true };
+    headerRowF.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
+
+    filteredFlights.forEach(f => {
+        sheetFlights.addRow([
+            f.flight,
+            f.reason,
+            f.containerOrder,
+            f.route,
+            f.statement,
+            f.vehicle,
+            f.container || '—',
+            f.yardA,
+            f.nodeA,
+            formatTimeOnly(f.calculatedPlacement),
+            f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—',
+            f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—',
+            formatTimeOnly(f.calculatedRampLeave),
+            f.departureStr ? f.departureStr.split(' ')[1] : '—',
+            f.yardB,
+            f.nodeB,
+            f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—',
+            formatTimeOnly(f.calculatedUnloadStart),
+            formatTimeOnly(f.calculatedUnloadEnd)
+        ]);
+    });
+    sheetFlights.columns.forEach(col => col.width = 15); // Базовая ширина колонок рейсов
+
+    // 2. ФОРМИРУЕМ ЛИСТ СОБЫТИЙ
+    const sheetEvents = workbook.addWorksheet('Події (Факт)');
+    const eventHeaders = ["День", "Час події", "Рейс", "Номер ТЗ", "Контейнер", "Назва операції"];
+    
+    const headerRowE = sheetEvents.addRow(eventHeaders);
+    headerRowE.font = { bold: true };
+    headerRowE.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
+
+    filteredEvents.forEach(ev => {
+        sheetEvents.addRow([
+            formatDateOnly(ev.dateTime),
+            formatTimeOnly(ev.dateTime),
+            ev.flight,
+            ev.vehicle,
+            ev.container || '—',
+            ev.eventType
+        ]);
+    });
+    sheetEvents.columns.forEach(col => col.width = 16); // Базовая ширина колонок событий
+
+    return true;
+};
