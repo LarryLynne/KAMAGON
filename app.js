@@ -1055,62 +1055,74 @@ function calculateRampTimes() {
     const groups = {};
     detailedSchedules.forEach(item => {
         if (item.timeDepartureA === "—") return;
-        const key = `${item.nodeA}_${item.day}`;
+        
+        // Групуємо за вузлом та маршрутом
+        const key = `${item.nodeA}_${item.originalRoute}`;
+        
         if (!groups[key]) groups[key] = [];
+        
         item.absDep = getAbsoluteMinutes(item.day, item.timeDepartureA);
-        item.timeDepartureA = formatAbsoluteMinutes(item.absDep); 
         groups[key].push(item);
     });
     
     for (const key in groups) {
         const group = groups[key];
-        group.sort((a, b) => a.absDep - b.absDep || a.originalRoute.localeCompare(b.originalRoute));
+        
+        // Сортуємо хронологічно
+        group.sort((a, b) => a.absDep - b.absDep);
+        
         if (group.length === 0) continue;
         
         const yardConf = yardDictionary[group[0].nodeA];
-        const hasFixedFirst = yardConf && yardConf.firstPlacement && yardConf.firstPlacement !== "0:00";
-        const firstAbs = hasFixedFirst ? getAbsoluteMinutes(group[0].day, yardConf.firstPlacement) : 0;
-
-        let prevAbsDep = group[0].absDep - 10080; 
         
-        for (let i = 0; i < group.length; i++) {
-            let item1 = group[i];
-            let item2 = (i + 1 < group.length) ? group[i + 1] : null;
+        let firstAbs = Infinity;
+        if (yardConf && yardConf.firstPlacement !== undefined) {
+            let fp = String(yardConf.firstPlacement).trim();
+            if (fp !== "" && fp !== "—" && fp !== "-") {
+                if (!fp.includes(':')) fp += ":00"; 
+                firstAbs = getAbsoluteMinutes(group[0].day, fp);
+            }
+        }
+        
+        if (isNaN(firstAbs) || firstAbs === Infinity) {
+            firstAbs = getAbsoluteMinutes(group[0].day, "00:00");
+        }
+        if (isNaN(firstAbs) || firstAbs === Infinity) {
+            firstAbs = group[0].absDep - 120;
+        }
+
+        let prevAbsDep = 0; 
+        let isFirstBatch = true;
+        
+        let i = 0;
+        while (i < group.length) {
+            let currentAbsDep = group[i].absDep;
             
-            let isTwin = item2 && 
-                         item1.originalRoute === item2.originalRoute && 
-                         item1.day === item2.day && 
-                         item1.absDep === item2.absDep;
+            // Збираємо ВУЗОЛ: всі контейнери, що виїжджають в одну і ту ж хвилину (двійники, трійники)
+            let batch = [];
+            while (i < group.length && group[i].absDep === currentAbsDep) {
+                batch.push(group[i]);
+                i++;
+            }
 
             let proposedPlacement;
-            if (i === 0 && hasFixedFirst) {
+            if (isFirstBatch) {
                 proposedPlacement = firstAbs;
+                isFirstBatch = false;
             } else {
                 proposedPlacement = prevAbsDep + interval;
             }
 
-            let maxPlacementTime = item1.absDep - (23 * 60); 
+            let maxPlacementTime = currentAbsDep - (23 * 60); 
             let finalPlacement = Math.max(proposedPlacement, maxPlacementTime);
             
-            if (isTwin) {
-                let totalLoadTime = item1.absDep - finalPlacement;
-                if (totalLoadTime <= 120) {
-                    item1.timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                    item2.timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                    prevAbsDep = item1.absDep;
-                } else {
-                    let tHalf = Math.floor((totalLoadTime - 10) / 2);
-                    item1.timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                    item1.absDep = finalPlacement + tHalf; 
-                    item1.timeDepartureA = formatAbsoluteMinutes(item1.absDep);
-                    item2.timePlacementA = formatAbsoluteMinutes(finalPlacement + tHalf + 10);
-                    prevAbsDep = item2.absDep;
-                }
-                i++; 
-            } else {
-                item1.timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                prevAbsDep = item1.absDep;
-            }
+            // Застосовуємо однаковий час постановки і ЗБЕРІГАЄМО виїзд для всіх контейнерів у партії
+            batch.forEach(item => {
+                item.timePlacementA = formatAbsoluteMinutes(finalPlacement);
+                item.timeDepartureA = formatAbsoluteMinutes(item.absDep);
+            });
+
+            prevAbsDep = currentAbsDep;
         }
     }
 }
@@ -1322,7 +1334,8 @@ function calculateFleetRequirements() {
         const fontK = yardNorms[yard] ? yardNorms[yard].k : 12;
         const fontM = yardNorms[yard] ? yardNorms[yard].m : 6;
 
-        let yardVirtualType = availK >= availM ? 'kamag' : 'man';
+        const virtualFleetRadio = document.querySelector('input[name="virtualFleetType"]:checked');
+        let yardVirtualType = virtualFleetRadio ? virtualFleetRadio.value : (availK >= availM ? 'kamag' : 'man');
         let maxExtraK = 0;
         let maxExtraM = 0;
 
@@ -1399,12 +1412,19 @@ function calculateFleetRequirements() {
     const yardSelect = document.getElementById('kamagYardSelect');
     const currentVal = yardSelect.value;
     yardSelect.innerHTML = "";
-    Object.keys(totalOpsData).sort().forEach(yard => {
+    
+    // Берем все уникальные автодворы из глобального справочника, а не только из текущего расчета
+    const uniqueYards = Object.keys(yardDictionary).map(k => yardDictionary[k].yard).filter((v, i, a) => v && a.indexOf(v) === i).sort();
+    
+    uniqueYards.forEach(yard => {
         const option = document.createElement('option');
         option.value = option.textContent = yard;
         yardSelect.appendChild(option);
     });
-    if (currentVal && totalOpsData[currentVal]) yardSelect.value = currentVal;
+    
+    if (currentVal && uniqueYards.includes(currentVal)) {
+        yardSelect.value = currentVal;
+    }
 
     // СТРАХОВОЧНЫЙ СЛОТ КУПИРОВАНИЯ ДЛЯ РДУ ПОСЛЕ ПЕРЕСЧЕТА МАТРИЦЫ
     const isAuth = sessionStorage.getItem('kamagonAuth') === 'true';

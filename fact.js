@@ -23,10 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
             tabFact.classList.add('active');
             containerFact.style.display = 'flex';
         }
+    });
+
+    // А список дворов загружаем один раз при старте страницы
+    setTimeout(() => {
         updateFactYardsDropdown();
         loadSavedFactYardsList();
-        renderFactDashboard();
-    });
+    }, 1000);
 
     const loadFactBtn = document.getElementById('loadFactGoogleYardBtn');
     if (loadFactBtn) loadFactBtn.addEventListener('click', loadFactFromGoogle);
@@ -275,22 +278,22 @@ function processFactData(text) {
             // Логирование событий и накопление матрицы операций
             if (row.yardA !== "Невідомий автодвір") {
                 if (dPlacementA) {
-                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
+                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
                     recordMatrixOp(row.yardA, dPlacementA, "op1");
                 }
                 if (dRampLeaveA) {
-                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "2. Забір", dateTime: dRampLeaveA });
+                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "2. Забір", dateTime: dRampLeaveA });
                     recordMatrixOp(row.yardA, dRampLeaveA, "op2");
                 }
             }
 
             if (row.yardB !== "Невідомий автодвір") {
                 if (dPlacementB) {
-                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "3. Постановка", dateTime: dPlacementB });
+                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "3. Постановка", dateTime: dPlacementB });
                     recordMatrixOp(row.yardB, dPlacementB, "op3");
                 }
                 if (dRampLeaveB) {
-                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, vehicle: row.vehicle, container: row.container, eventType: "4. Забір", dateTime: dRampLeaveB });
+                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "4. Забір", dateTime: dRampLeaveB });
                     recordMatrixOp(row.yardB, dRampLeaveB, "op4");
                 }
             }
@@ -620,26 +623,31 @@ function fillEventsContent(yard) {
         return;
     }
 
-    let html = `<table id="factEventsTable"><thead><tr>
-        <th>Автодвір<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:100%; box-sizing:border-box;"></th>
-        <th>День<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:100%; box-sizing:border-box;"></th>
-        <th>Час події<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:100%; box-sizing:border-box;"></th>
-        <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:100%; box-sizing:border-box;"></th>
-        <th>Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:100%; box-sizing:border-box;"></th>
-        <th>Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:100%; box-sizing:border-box;"></th>
-        <th>Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="6" style="width:100%; box-sizing:border-box;"></th>
+    let html = `<style>
+        #factEventsTable th, #factEventsTable td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 6px; }
+    </style>
+    <table id="factEventsTable" style="table-layout: fixed; width: 1000px;"><thead><tr>
+        <th style="width:130px;">Автодвір<br><input type="text" class="fact-col-filter filter-input" data-col="0"></th>
+        <th style="width:90px;">День<br><input type="text" class="fact-col-filter filter-input" data-col="1"></th>
+        <th style="width:80px;">Час події<br><input type="text" class="fact-col-filter filter-input" data-col="2"></th>
+        <th style="width:80px;">Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="3"></th>
+        <th style="width:150px;">Причина створення<br><input type="text" class="fact-col-filter filter-input" data-col="4"></th>
+        <th style="width:100px;">Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="5"></th>
+        <th style="width:120px;">Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="6"></th>
+        <th style="width:150px;">Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="7"></th>
     </tr></thead><tbody>`;
 
     filteredEvents.forEach(ev => {
         let opColor = (ev.eventType.startsWith("1") || ev.eventType.startsWith("3")) ? "color:#15803d;" : "color:#b45309;";
         html += `<tr>
-            <td style="font-weight:bold; color:#475569;">${ev.yard}</td>
-            <td style="font-weight:bold;">${formatDateOnly(ev.dateTime)}</td>
-            <td>${formatTimeOnly(ev.dateTime)}</td>
-            <td>${ev.flight}</td>
-            <td style="font-weight:bold; color:#0369a1;">${ev.vehicle}</td>
-            <td style="font-weight:bold; color:#475569;">${ev.container || '—'}</td>
-            <td style="font-weight:bold; ${opColor}">${ev.eventType}</td>
+            <td style="font-weight:bold; color:#475569;" title="${ev.yard}">${ev.yard}</td>
+            <td style="font-weight:bold;" title="${formatDateOnly(ev.dateTime)}">${formatDateOnly(ev.dateTime)}</td>
+            <td title="${formatTimeOnly(ev.dateTime)}">${formatTimeOnly(ev.dateTime)}</td>
+            <td title="${ev.flight}">${ev.flight}</td>
+            <td style="color:#64748b; font-weight:500;" title="${ev.reason || '—'}">${ev.reason || '—'}</td>
+            <td style="font-weight:bold; color:#0369a1;" title="${ev.vehicle}">${ev.vehicle}</td>
+            <td style="font-weight:bold; color:#475569;" title="${ev.container || '—'}">${ev.container || '—'}</td>
+            <td style="font-weight:bold; ${opColor}" title="${ev.eventType}">${ev.eventType}</td>
         </tr>`;
     });
     html += `</tbody></table>`;
@@ -664,47 +672,56 @@ function fillFlightsContent(yard) {
         return;
     }
 
-    let html = `<table id="factFlightsTable"><thead><tr>
-        <th>Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="0" style="width:70px;"></th>
-        <th>Причина створення<br><input type="text" class="fact-col-filter filter-input" data-col="1" style="width:110px;"></th>
-        <th>Порядок<br><input type="text" class="fact-col-filter filter-input" data-col="2" style="width:40px;"></th>
-        <th>Маршрут<br><input type="text" class="fact-col-filter filter-input" data-col="3" style="width:120px;"></th>
-        <th>Відомість<br><input type="text" class="fact-col-filter filter-input" data-col="4" style="width:80px;"></th>
-        <th>ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="5" style="width:80px;"></th>
-        <th>Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="6" style="width:80px;"></th>
-        <th>Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="7" style="width:80px;"></th>
-        <th>Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="8" style="width:80px;"></th>
-        <th>1. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="9" style="width:60px;"></th>
-        <th>Початок скан.<br><input type="text" class="fact-col-filter filter-input" data-col="10" style="width:60px;"></th>
-        <th>Кінець скан.<br><input type="text" class="fact-col-filter filter-input" data-col="11" style="width:60px;"></th>
-        <th>2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="12" style="width:60px;"></th>
-        <th>Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="13" style="width:60px;"></th>
-        <th>Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="14" style="width:80px;"></th>
-        <th>Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="15" style="width:80px;"></th>
-        <th>Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="16" style="width:60px;"></th>
-        <th>3. Постановка<br><input type="text" class="fact-col-filter filter-input" data-col="17" style="width:60px;"></th>
-        <th>4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="18" style="width:60px;"></th>
+    let html = `<style>
+        #factFlightsTable th, #factFlightsTable td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 6px; }
+    </style>
+    <table id="factFlightsTable" style="table-layout: fixed; width: 1880px;"><thead><tr>
+        <th style="width:60px;">Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="0"></th>
+        <th style="width:110px;">Дата та час<br><input type="text" class="fact-col-filter filter-input" data-col="1"></th>
+        <th style="width:120px;">Причина ств.<br><input type="text" class="fact-col-filter filter-input" data-col="2"></th>
+        <th style="width:50px;">Пор.<br><input type="text" class="fact-col-filter filter-input" data-col="3"></th>
+        <th style="width:140px;">Маршрут<br><input type="text" class="fact-col-filter filter-input" data-col="4"></th>
+        <th style="width:80px;">Відомість<br><input type="text" class="fact-col-filter filter-input" data-col="5"></th>
+        <th style="width:80px;">ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="6"></th>
+        <th style="width:90px;">Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="7"></th>
+        <th style="width:100px;">Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="8"></th>
+        <th style="width:100px;">Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="9"></th>
+        <th style="width:65px;">1. Пост.<br><input type="text" class="fact-col-filter filter-input" data-col="10"></th>
+        <th style="width:65px;">Поч. скан.<br><input type="text" class="fact-col-filter filter-input" data-col="11"></th>
+        <th style="width:65px;">Кін. скан.<br><input type="text" class="fact-col-filter filter-input" data-col="12"></th>
+        <th style="width:65px;">2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="13"></th>
+        <th style="width:65px;">Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="14"></th>
+        <th style="width:100px;">Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="15"></th>
+        <th style="width:100px;">Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="16"></th>
+        <th style="width:65px;">Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="17"></th>
+        <th style="width:65px;">3. Пост.<br><input type="text" class="fact-col-filter filter-input" data-col="18"></th>
+        <th style="width:65px;">4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="19"></th>
     </tr></thead><tbody>`;
 
     filtered.forEach(f => {
+        // Формуємо об'єднану дату і час для рейсу
+        let dtObj = f.calculatedPlacement || f.calculatedUnloadStart;
+        let flightDateTimeStr = dtObj ? `${formatDateOnly(dtObj)} ${formatTimeOnly(dtObj)}` : '—';
+
         html += `<tr>
-            <td>${f.flight}</td>
-            <td style="color:#64748b; font-weight:500;">${f.reason}</td>
-            <td style="text-align:center; font-weight:bold; color:#64748b;">${f.containerOrder}</td>
-            <td class="col-route">${f.route}</td>
-            <td>${f.statement}</td>
-            <td style="font-weight:bold; color:#0369a1;">${f.vehicle}</td>
-            <td style="font-weight:bold; color:#475569;">${f.container || '—'}</td>
-            <td>${f.yardA}</td><td>${f.nodeA}</td>
-            <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedPlacement)}</td>
-            <td>${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}</td>
-            <td>${f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—'}</td>
-            <td style="color:#b45309; font-weight:bold;">${formatTimeOnly(f.calculatedRampLeave)}</td>
-            <td>${f.departureStr ? f.departureStr.split(' ')[1] : '—'}</td>
-            <td>${f.yardB}</td><td>${f.nodeB}</td>
-            <td>${f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—'}</td>
-            <td style="color:#15803d; font-weight:bold;">${formatTimeOnly(f.calculatedUnloadStart)}</td>
-            <td style="color:#b45309; font-weight:bold;">${formatTimeOnly(f.calculatedUnloadEnd)}</td>
+            <td title="${f.flight}">${f.flight}</td>
+            <td style="font-weight:bold; color:#0f172a;" title="${flightDateTimeStr}">${flightDateTimeStr}</td>
+            <td style="color:#64748b; font-weight:500;" title="${f.reason}">${f.reason}</td>
+            <td style="text-align:center; font-weight:bold; color:#64748b;" title="${f.containerOrder}">${f.containerOrder}</td>
+            <td class="col-route" title="${f.route}">${f.route}</td>
+            <td title="${f.statement}">${f.statement}</td>
+            <td style="font-weight:bold; color:#0369a1;" title="${f.vehicle}">${f.vehicle}</td>
+            <td style="font-weight:bold; color:#475569;" title="${f.container || '—'}">${f.container || '—'}</td>
+            <td title="${f.yardA}">${f.yardA}</td><td title="${f.nodeA}">${f.nodeA}</td>
+            <td style="color:#15803d; font-weight:bold;" title="${formatTimeOnly(f.calculatedPlacement)}">${formatTimeOnly(f.calculatedPlacement)}</td>
+            <td title="${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}">${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}</td>
+            <td title="${f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—'}">${f.endLoadStr ? f.endLoadStr.split(' ')[1] : '—'}</td>
+            <td style="color:#b45309; font-weight:bold;" title="${formatTimeOnly(f.calculatedRampLeave)}">${formatTimeOnly(f.calculatedRampLeave)}</td>
+            <td title="${f.departureStr ? f.departureStr.split(' ')[1] : '—'}">${f.departureStr ? f.departureStr.split(' ')[1] : '—'}</td>
+            <td title="${f.yardB}">${f.yardB}</td><td title="${f.nodeB}">${f.nodeB}</td>
+            <td title="${f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—'}">${f.arrivalStr ? f.arrivalStr.split(' ')[1] : '—'}</td>
+            <td style="color:#15803d; font-weight:bold;" title="${formatTimeOnly(f.calculatedUnloadStart)}">${formatTimeOnly(f.calculatedUnloadStart)}</td>
+            <td style="color:#b45309; font-weight:bold;" title="${formatTimeOnly(f.calculatedUnloadEnd)}">${formatTimeOnly(f.calculatedUnloadEnd)}</td>
         </tr>`;
     });
     html += `</tbody></table>`;
@@ -727,15 +744,20 @@ function attachFactLiveFilters() {
         const flightsTable = document.getElementById('factFlightsTable');
 
         if (eventsTable && flightsTable) {
-            // ІСПРАВЛЕНО: Зсунуті індекси через нову колонку (Рейс тепер col 3, ТЗ тепер col 4)
             const evFlight = eventsTable.querySelector('.fact-col-filter[data-col="3"]'); 
-            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="4"]'); 
+            const evReason = eventsTable.querySelector('.fact-col-filter[data-col="4"]'); 
+            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="5"]'); 
             
             const flFlight = flightsTable.querySelector('.fact-col-filter[data-col="0"]'); 
-            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="5"]'); 
+            const flReason = flightsTable.querySelector('.fact-col-filter[data-col="2"]'); // Зсунуто через стовпець "Дата та час"
+            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="6"]'); // Зсунуто через стовпець "Дата та час"
 
             if (e.target === evFlight && flFlight) flFlight.value = evFlight.value;
             if (e.target === flFlight && evFlight) evFlight.value = flFlight.value;
+
+            if (e.target === evReason && flReason) flReason.value = evReason.value;
+            if (e.target === flReason && evReason) evReason.value = flReason.value;
+
             if (e.target === evVehicle && flVehicle) flVehicle.value = evVehicle.value;
             if (e.target === flVehicle && evVehicle) evVehicle.value = flVehicle.value;
         }
@@ -929,7 +951,7 @@ window.exportFactToExcel = async function(workbook) {
     // Створюємо рівно два майстер-листи для накопичення даних
     const sheetFlights = workbook.addWorksheet('Рейси (Факт)');
     const flightHeaders = [
-        "Автодвір (Аналітика)", "Рейс", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер",
+        "Автодвір (Аналітика)", "Рейс", "Дата та час", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер",
         "Автодвір А", "Вузол А", "1. Постановка", "Початок скан.", "Кінець скан.", "2. Забір", "Виїзд",
         "Автодвір Б", "Вузол Б", "Приїзд", "3. Постановка", "4. Забір"
     ];
@@ -958,9 +980,13 @@ window.exportFactToExcel = async function(workbook) {
         );
 
         filteredFlights.forEach(f => {
+            let dtObj = f.calculatedPlacement || f.calculatedUnloadStart;
+            let flightDateTimeStr = dtObj ? `${formatDateOnly(dtObj)} ${formatTimeOnly(dtObj)}` : '—';
+
             sheetFlights.addRow([
                 yard, 
                 f.flight,
+                flightDateTimeStr,
                 f.reason,
                 f.containerOrder,
                 f.route,
@@ -988,6 +1014,7 @@ window.exportFactToExcel = async function(workbook) {
                 formatDateOnly(ev.dateTime),
                 formatTimeOnly(ev.dateTime),
                 ev.flight,
+                ev.reason || '—',
                 ev.vehicle,
                 ev.container || '—',
                 ev.eventType
