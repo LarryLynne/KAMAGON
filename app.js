@@ -867,13 +867,59 @@ function generateDetailedSchedules(targetYard, useDates) {
     allSchedules.forEach(item => {
         if (!item.schema || item.schema === "ХЗ" || item.schema === "Схема не знайдена" || item.schema === "—") return;
 
+        // --- 1. СТВОРЕННЯ ХРОНОЛОГІЧНОГО ТАЙМЛАЙНУ МАРШРУТУ ---
+        let currentDayOffset = 0;
+        let lastTimeMins = -1;
+        let nodeTimes = []; // Зберігає зміщення в днях для кожної точки
+        
+        for (let i = 0; i < 12; i++) {
+            let arrTime = item.allTimes[i * 2];
+            let depTime = item.allTimes[i * 2 + 1];
+            
+            let arrDayOffset = null;
+            if (arrTime && arrTime !== "—") {
+                let [h, m] = arrTime.split(':').map(Number);
+                let mins = h * 60 + m;
+                // Якщо час менший за попередній (перехід через північ), додаємо +1 день
+                if (lastTimeMins !== -1 && mins < lastTimeMins) currentDayOffset++;
+                arrDayOffset = currentDayOffset;
+                lastTimeMins = mins;
+            }
+            
+            let depDayOffset = null;
+            if (depTime && depTime !== "—") {
+                let [h, m] = depTime.split(':').map(Number);
+                let mins = h * 60 + m;
+                // Якщо час менший за попередній (перехід через північ), додаємо +1 день
+                if (lastTimeMins !== -1 && mins < lastTimeMins) currentDayOffset++;
+                depDayOffset = currentDayOffset;
+                lastTimeMins = mins;
+            }
+            
+            nodeTimes.push({ arrDayOffset, arrTime, depDayOffset, depTime });
+        }
+
+        // --- 2. ЗНАХОДИМО ЯКІР (День тижня = виїзд з першого валідного вузла) ---
+        let anchorDayOffset = 0;
+        for (let i = 0; i < 12; i++) {
+            if (item.pointNames[i] && item.pointNames[i].toString().trim() !== "") {
+                if (nodeTimes[i].depDayOffset !== null) {
+                    anchorDayOffset = nodeTimes[i].depDayOffset;
+                    break;
+                }
+            }
+        }
+
+        // Формуємо активні вузли з прив'язкою до хронологічного зміщення
         const activeNodes = [];
         for (let i = 0; i < 12; i++) {
             if (item.pointNames[i] && item.pointNames[i].toString().trim() !== "") {
                 activeNodes.push({
                     name: item.pointNames[i].toString().trim(),
-                    timeArr: item.allTimes[i * 2],
-                    timeDep: item.allTimes[i * 2 + 1]
+                    timeArr: nodeTimes[i].arrTime,
+                    arrDayOffset: nodeTimes[i].arrDayOffset,
+                    timeDep: nodeTimes[i].depTime,
+                    depDayOffset: nodeTimes[i].depDayOffset
                 });
             }
         }
@@ -899,6 +945,15 @@ function generateDetailedSchedules(targetYard, useDates) {
 
             const dateString = formatDateToDDMMYYYY(targetDate);
 
+            // Функція обчислення фінальної дати відносно якоря (першого виїзду)
+            const applyOffset = (baseDate, eventDayOffset) => {
+                if (eventDayOffset === null) return "—";
+                let d = new Date(baseDate);
+                // Додаємо різницю днів між поточною подією та якорем
+                d.setDate(d.getDate() + (eventDayOffset - anchorDayOffset));
+                return formatDateToDDMMYYYY(d);
+            };
+
             miniSchemas.forEach(mini => {
                 if (mini.length < 3) return; 
 
@@ -918,22 +973,26 @@ function generateDetailedSchedules(targetYard, useDates) {
                 
                 if (targetYard !== "ALL" && (!yardDataA || yardDataA.yard !== targetYard) && (!yardDataB || yardDataB.yard !== targetYard)) return;
 
-                let arrMins = getAbsoluteMinutes(dateString, nodeB.timeArr);
-                let finalArrivalB = formatAbsoluteMinutes(arrMins);
+                // --- 3. ФОРМУЄМО ТОЧНИЙ ЧАС З ПРАВИЛЬНИМИ ДАТАМИ ---
+                let dateDepA = applyOffset(targetDate, nodeA.depDayOffset);
+                let finalDepartureA = dateDepA !== "—" ? `${dateDepA} ${nodeA.timeDep}` : "—";
+                
+                let dateArrB = applyOffset(targetDate, nodeB.arrDayOffset);
+                let finalArrivalB = dateArrB !== "—" ? `${dateArrB} ${nodeB.timeArr}` : "—";
 
                 detailedSchedules.push({
                     originalRoute: item.route,
                     originalCode: item.code, 
-                    day: dateString, 
+                    day: dateString, // Якірний день для фільтрів (залишається як Пн/Вт)
                     miniSchema: mini,
                     containerType: containerType,
                     yardA: yardDataA ? yardDataA.yard : "—", 
                     nodeA: nodeA.name,
                     timePlacementA: "—", 
-                    timeDepartureA: nodeA.timeDep || "—",
+                    timeDepartureA: finalDepartureA, // Тепер тут повна точна дата виїзду
                     yardB: yardDataB ? yardDataB.yard : "—",
                     nodeB: nodeB.name,
-                    timeArrivalB: finalArrivalB,
+                    timeArrivalB: finalArrivalB,     // Тепер тут повна точна дата приїзду
                     timeUnloadStart: "—", 
                     timeUnloadEnd: "—",   
                     vehicle: item.vehicleType,
@@ -1056,8 +1115,8 @@ function calculateRampTimes() {
     detailedSchedules.forEach(item => {
         if (item.timeDepartureA === "—") return;
         
-        // Групуємо за вузлом та маршрутом
-        const key = `${item.nodeA}_${item.originalRoute}`;
+        const destination = item.yardB !== "—" ? item.yardB : item.nodeB;
+        const key = `${item.nodeA}_${destination}`;
         
         if (!groups[key]) groups[key] = [];
         
@@ -1068,55 +1127,58 @@ function calculateRampTimes() {
     for (const key in groups) {
         const group = groups[key];
         
-        // Сортуємо хронологічно
         group.sort((a, b) => a.absDep - b.absDep);
         
         if (group.length === 0) continue;
         
         const yardConf = yardDictionary[group[0].nodeA];
-        
-        let firstAbs = Infinity;
-        if (yardConf && yardConf.firstPlacement !== undefined) {
-            let fp = String(yardConf.firstPlacement).trim();
-            if (fp !== "" && fp !== "—" && fp !== "-") {
-                if (!fp.includes(':')) fp += ":00"; 
-                firstAbs = getAbsoluteMinutes(group[0].day, fp);
-            }
-        }
-        
-        if (isNaN(firstAbs) || firstAbs === Infinity) {
-            firstAbs = getAbsoluteMinutes(group[0].day, "00:00");
-        }
-        if (isNaN(firstAbs) || firstAbs === Infinity) {
-            firstAbs = group[0].absDep - 120;
-        }
+        let fp = (yardConf && yardConf.firstPlacement !== undefined) ? String(yardConf.firstPlacement).trim() : "0:00";
+        if (fp === "" || fp === "—" || fp === "-") fp = "0:00";
+        if (!fp.includes(':')) fp += ":00";
 
-        let prevAbsDep = 0; 
-        let isFirstBatch = true;
+        // --- ІДЕАЛЬНИЙ ПОШУК СТИКУ ТИЖНЯ ---
+        // Беремо базовий відступ у 7 днів
+        let prevAbsDep = group[0].absDep - 10080; 
         
+        // Проектуємо весь наш згенерований тиждень у минуле
+        group.forEach(item => {
+            let ghostDep = item.absDep;
+            // Відмотуємо кожен рейс рівно на тижні назад, поки він не опиниться перед найпершим рейсом
+            while (ghostDep >= group[0].absDep) {
+                ghostDep -= 10080;
+            }
+            // Шукаємо той, що найближче прилягає до початку нашого тижня
+            if (ghostDep > prevAbsDep) {
+                prevAbsDep = ghostDep;
+            }
+        });
+
         let i = 0;
         while (i < group.length) {
             let currentAbsDep = group[i].absDep;
             
-            // Збираємо ВУЗОЛ: всі контейнери, що виїжджають в одну і ту ж хвилину (двійники, трійники)
             let batch = [];
             while (i < group.length && group[i].absDep === currentAbsDep) {
                 batch.push(group[i]);
                 i++;
             }
 
-            let proposedPlacement;
-            if (isFirstBatch) {
-                proposedPlacement = firstAbs;
-                isFirstBatch = false;
-            } else {
-                proposedPlacement = prevAbsDep + interval;
-            }
+            let proposedPlacement = prevAbsDep + interval;
 
-            let maxPlacementTime = currentAbsDep - (23 * 60); 
-            let finalPlacement = Math.max(proposedPlacement, maxPlacementTime);
+            let idleTime = currentAbsDep - proposedPlacement;
+            let finalPlacement;
             
-            // Застосовуємо однаковий час постановки і ЗБЕРІГАЄМО виїзд для всіх контейнерів у партії
+            if (idleTime > 23 * 60) {
+                let cappedPlacement = getAbsoluteMinutes(batch[0].day, fp);
+                
+                if (cappedPlacement >= currentAbsDep) {
+                    cappedPlacement -= 24 * 60;
+                }
+                finalPlacement = cappedPlacement;
+            } else {
+                finalPlacement = proposedPlacement;
+            }
+            
             batch.forEach(item => {
                 item.timePlacementA = formatAbsoluteMinutes(finalPlacement);
                 item.timeDepartureA = formatAbsoluteMinutes(item.absDep);
@@ -1126,7 +1188,6 @@ function calculateRampTimes() {
         }
     }
 }
-
 function calculateUnloadingTimes() {
     const containerCounts = {};
     detailedSchedules.forEach(item => {
