@@ -1110,7 +1110,7 @@ function formatAbsoluteMinutes(mins) {
 
 function calculateRampTimes() {
     const interval = parseInt(document.getElementById('rampInterval').value, 10) || 10;
-    
+
     const groups = {};
     detailedSchedules.forEach(item => {
         if (item.timeDepartureA === "—") return;
@@ -1126,57 +1126,98 @@ function calculateRampTimes() {
     
     for (const key in groups) {
         const group = groups[key];
-        
         group.sort((a, b) => a.absDep - b.absDep);
         
         if (group.length === 0) continue;
         
         const yardConf = yardDictionary[group[0].nodeA];
-        let fp = (yardConf && yardConf.firstPlacement !== undefined) ? String(yardConf.firstPlacement).trim() : "0:00";
-        if (fp === "" || fp === "—" || fp === "-") fp = "0:00";
-        if (!fp.includes(':')) fp += ":00";
-
-        // --- ІДЕАЛЬНИЙ ПОШУК СТИКУ ТИЖНЯ ---
-        // Беремо базовий відступ у 7 днів
-        let prevAbsDep = group[0].absDep - 10080; 
+        let fpStr = (yardConf && yardConf.firstPlacement !== undefined) ? String(yardConf.firstPlacement).trim() : "0:00";
         
-        // Проектуємо весь наш згенерований тиждень у минуле
-        group.forEach(item => {
-            let ghostDep = item.absDep;
-            // Відмотуємо кожен рейс рівно на тижні назад, поки він не опиниться перед найпершим рейсом
-            while (ghostDep >= group[0].absDep) {
-                ghostDep -= 10080;
-            }
-            // Шукаємо той, що найближче прилягає до початку нашого тижня
-            if (ghostDep > prevAbsDep) {
-                prevAbsDep = ghostDep;
-            }
-        });
+        // --- БРОНЕБІЙНИЙ ПАРСЕР ЧАСУ ПЕРШОЇ ПОСТАНОВКИ ---
+        // Витягуємо чисті години та хвилини, ігноруючи будь-які формати Google
+        let fpHours = 0, fpMins = 0;
+        let isZeroTime = false;
 
+        if (fpStr === "0:00" || fpStr === "0" || fpStr === "00:00" || fpStr === "") {
+            isZeroTime = true;
+        } else if (fpStr.includes('T') && fpStr.includes('Z')) {
+            const tempD = new Date(fpStr);
+            if (!isNaN(tempD)) { fpHours = tempD.getHours(); fpMins = tempD.getMinutes(); }
+        } else if (!fpStr.includes(':') && !isNaN(parseFloat(fpStr))) {
+            let num = parseFloat(fpStr);
+            if (num < 1) {
+                let totalMins = Math.round(num * 24 * 60);
+                fpHours = Math.floor(totalMins / 60);
+                fpMins = totalMins % 60;
+            } else {
+                fpHours = parseInt(num, 10);
+            }
+        } else {
+            // Шукаємо будь-які цифри, розділені двокрапкою, крапкою або комою (напр. "5:00", "05.00")
+            let match = fpStr.match(/(\d+)[:.,](\d+)/);
+            if (match) {
+                fpHours = parseInt(match[1], 10) || 0;
+                fpMins = parseInt(match[2], 10) || 0;
+            } else {
+                let singleNum = parseInt(fpStr, 10);
+                if (!isNaN(singleNum)) fpHours = singleNum;
+            }
+        }
+
+        isZeroTime = (fpHours === 0 && fpMins === 0);
+
+        // Інтервал з колонки Q (якщо порожньо — беремо з поля на екрані)
+        let defaultInterval = (yardConf && yardConf.nextPlacementInterval !== undefined && !isNaN(yardConf.nextPlacementInterval) && yardConf.nextPlacementInterval !== "") 
+            ? Number(yardConf.nextPlacementInterval) 
+            : interval;
+
+        let prevAbsDep = null;
         let i = 0;
+
         while (i < group.length) {
             let currentAbsDep = group[i].absDep;
-            
+            let currentDay = group[i].day; 
+
             let batch = [];
             while (i < group.length && group[i].absDep === currentAbsDep) {
                 batch.push(group[i]);
                 i++;
             }
 
-            let proposedPlacement = prevAbsDep + interval;
+            // Розрив між виїздами
+            let gap = prevAbsDep !== null ? (currentAbsDep - prevAbsDep) : Infinity;
+            let isNewShift = gap >= 10 * 60; // 10 годин — поріг нової зміни
 
-            let idleTime = currentAbsDep - proposedPlacement;
             let finalPlacement;
-            
-            if (idleTime > 23 * 60) {
-                let cappedPlacement = getAbsoluteMinutes(batch[0].day, fp);
-                
-                if (cappedPlacement >= currentAbsDep) {
-                    cappedPlacement -= 24 * 60;
+
+            if (isNewShift) {
+                if (isZeroTime) {
+                    // Цілодобова робота
+                    if (prevAbsDep !== null) {
+                        let proposed = prevAbsDep + defaultInterval;
+                        finalPlacement = (currentAbsDep - proposed > 24 * 60) ? (currentAbsDep - 24 * 60) : proposed;
+                    } else {
+                        finalPlacement = currentAbsDep - 24 * 60;
+                    }
+                } else {
+                    // Є жорстка перша постановка (напр. 5:00)
+                    // Створюємо ідеальну дату на основі витягнутих годин і хвилин
+                    const [dd, mm, yyyy] = currentDay.split('.');
+                    const baseDate = new Date(yyyy, mm - 1, dd, fpHours, fpMins);
+                    finalPlacement = Math.floor(baseDate.getTime() / 60000);
+
+                    // Якщо розрахована постановка вийшла пізніше за виїзд (напр. постановка 5:00 >= виїзд 00:35)
+                    if (finalPlacement >= currentAbsDep) {
+                        finalPlacement -= 24 * 60; // Відкидаємо на добу назад
+                    }
                 }
-                finalPlacement = cappedPlacement;
             } else {
-                finalPlacement = proposedPlacement;
+                // Продовження поточної зміни (додаємо інтервал до попереднього виїзду)
+                if (prevAbsDep !== null) {
+                    finalPlacement = prevAbsDep + defaultInterval;
+                } else {
+                    finalPlacement = currentAbsDep - 24 * 60; 
+                }
             }
             
             batch.forEach(item => {
@@ -1188,6 +1229,7 @@ function calculateRampTimes() {
         }
     }
 }
+
 function calculateUnloadingTimes() {
     const containerCounts = {};
     detailedSchedules.forEach(item => {
