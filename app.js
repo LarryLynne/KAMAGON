@@ -6,6 +6,7 @@ let usersDictionary = {}; // СЛОВАРЬ ПОЛЬЗОВАТЕЛЕЙ
 let totalOpsData = {}; 
 let fleetActiveState = {}; 
 let systemFleetState = {}; // Базовое состояние автоматического расчета системы
+let yardVirtualTypes = {}; // <-- НОВИЙ: Словник типів доп. транспорту окремо для кожного двора
 
 function checkAuth() {
     return new Promise((resolve) => {
@@ -983,20 +984,21 @@ function generateDetailedSchedules(targetYard, useDates) {
                 detailedSchedules.push({
                     originalRoute: item.route,
                     originalCode: item.code, 
-                    day: dateString, // Якірний день для фільтрів (залишається як Пн/Вт)
+                    day: dateString, 
                     miniSchema: mini,
                     containerType: containerType,
                     yardA: yardDataA ? yardDataA.yard : "—", 
                     nodeA: nodeA.name,
                     timePlacementA: "—", 
-                    timeDepartureA: finalDepartureA, // Тепер тут повна точна дата виїзду
+                    timeDepartureA: finalDepartureA, 
                     yardB: yardDataB ? yardDataB.yard : "—",
                     nodeB: nodeB.name,
-                    timeArrivalB: finalArrivalB,     // Тепер тут повна точна дата приїзду
+                    timeArrivalB: finalArrivalB,     
                     timeUnloadStart: "—", 
                     timeUnloadEnd: "—",   
                     vehicle: item.vehicleType,
-                    moveType: item.moveType 
+                    moveType: item.moveType,
+                    deliveryType: item.deliveryType // <-- ДОДАЙ ЦЕЙ РЯДОК
                 });
             });
         });
@@ -1109,7 +1111,7 @@ function formatAbsoluteMinutes(mins) {
 }
 
 function calculateRampTimes() {
-    const interval = parseInt(document.getElementById('rampInterval').value, 10) || 10;
+    //const interval = parseInt(document.getElementById('rampInterval').value, 10) || 10;
 
     const groups = {};
     detailedSchedules.forEach(item => {
@@ -1131,7 +1133,21 @@ function calculateRampTimes() {
         if (group.length === 0) continue;
         
         const yardConf = yardDictionary[group[0].nodeA];
-        let fpStr = (yardConf && yardConf.firstPlacement !== undefined) ? String(yardConf.firstPlacement).trim() : "0:00";
+        
+        // --- РОЗУМНИЙ ВИБІР ПЕРШОЇ ПОСТАНОВКИ ---
+        // Перевіряємо, чи є маршрут міжрегіональним (ігноруючи регістр та пробіли)
+        const isInterregional = group[0].deliveryType && group[0].deliveryType.trim().toLowerCase() === "міжрегіональна";
+        
+        let fpStr = "0:00";
+        if (yardConf) {
+            if (isInterregional && yardConf.firstPlacementInterregional && yardConf.firstPlacementInterregional !== "") {
+                // Якщо міжрегіональна і стовпець S заповнений — беремо стовпець S
+                fpStr = String(yardConf.firstPlacementInterregional).trim();
+            } else if (yardConf.firstPlacement !== undefined && yardConf.firstPlacement !== "") {
+                // В усіх інших випадках (або якщо стовпець S порожній) — беремо стовпець G
+                fpStr = String(yardConf.firstPlacement).trim();
+            }
+        }
         
         // --- БРОНЕБІЙНИЙ ПАРСЕР ЧАСУ ПЕРШОЇ ПОСТАНОВКИ ---
         // Витягуємо чисті години та хвилини, ігноруючи будь-які формати Google
@@ -1169,7 +1185,7 @@ function calculateRampTimes() {
         // Інтервал з колонки Q (якщо порожньо — беремо з поля на екрані)
         let defaultInterval = (yardConf && yardConf.nextPlacementInterval !== undefined && !isNaN(yardConf.nextPlacementInterval) && yardConf.nextPlacementInterval !== "") 
             ? Number(yardConf.nextPlacementInterval) 
-            : interval;
+            : 10; // Дефолтно 10 хвилин, якщо в довіднику (колонка Q) порожньо
 
         let prevAbsDep = null;
         let i = 0;
@@ -1305,7 +1321,7 @@ function generateYardEvents() {
         return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
     });
 
-    const addEvent = (yard, nodeName, eventIndex, eventName, absMins, code) => {
+    const addEvent = (yard, nodeName, eventIndex, eventName, absMins, code, route) => {
         if (absMins === Infinity || isNaN(absMins)) return;
         const yardConf = yardDictionary[nodeName];
         let flag = 0;
@@ -1323,9 +1339,45 @@ function generateYardEvents() {
             
             if (allowedDates.length > 0 && !allowedDates.includes(parts[0])) return;
 
-            yardEvents.push({ yard: yard, code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins });
+            // Додаємо node та route в об'єкт події:
+            yardEvents.push({ yard: yard, node: nodeName, route: route || "—", code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins });
         }
     };
+
+    detailedSchedules.forEach(item => {
+        if (item.vehicle !== "Шасі BDF") return;
+
+        if (item.moveType && item.moveType.toLowerCase().includes("порожній")) {
+            if (item.yardB && item.yardB !== "—") {
+                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(item.day, item.timeArrivalB), item.originalCode, item.originalRoute);
+            }
+            return; 
+        }
+
+        if (item.yardA && item.yardA !== "—") {
+            const yardConf = yardDictionary[item.nodeA];
+            const bufferA = (yardConf && yardConf.planLeaveBuffer !== undefined) ? yardConf.planLeaveBuffer : 15;
+
+            if (item.timePlacementA && item.timePlacementA !== "—") {
+                const parts = item.timePlacementA.split(' ');
+                addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute);
+            }
+            if (item.timeDepartureA && item.timeDepartureA !== "—") {
+                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - bufferA, item.originalCode, item.originalRoute);
+            }
+        }
+        
+        if (item.yardB && item.yardB !== "—") {
+            if (item.timeUnloadStart && item.timeUnloadStart !== "—") {
+                const parts = item.timeUnloadStart.split(' ');
+                addEvent(item.yardB, item.nodeB, 3, "3. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute);
+            }
+            if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
+                const parts = item.timeUnloadEnd.split(' ');
+                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute);
+            }
+        }
+    });
 
     detailedSchedules.forEach(item => {
         if (item.vehicle !== "Шасі BDF") return;
@@ -1338,12 +1390,17 @@ function generateYardEvents() {
         }
 
         if (item.yardA && item.yardA !== "—") {
+            const yardConf = yardDictionary[item.nodeA];
+            // Вытягиваем буфер из настроек, если его нет — страхуемся дефолтными 15 минутами
+            const bufferA = (yardConf && yardConf.planLeaveBuffer !== undefined) ? yardConf.planLeaveBuffer : 15;
+
             if (item.timePlacementA && item.timePlacementA !== "—") {
                 const parts = item.timePlacementA.split(' ');
                 addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
             }
             if (item.timeDepartureA && item.timeDepartureA !== "—") {
-                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - 15, item.originalCode);
+                // Вместо хардкода -15 используем динамический буфер
+                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - bufferA, item.originalCode);
             }
         }
         
@@ -1373,6 +1430,8 @@ function initEventsTable() {
     let c = 0;
     let html = `<table><thead><tr>
         <th data-sort-event="yard" class="sortable">Автодвір<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
+        <th>Вузол<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
+        <th>Маршрут<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th>Код<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort-event="event" class="sortable">Подія<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort-event="day" class="sortable col-day">День<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
@@ -1398,6 +1457,8 @@ function renderEventsChunk() {
         const ev = filteredYardEvents[i];
         html += `<tr>
             <td style="font-weight: bold;">${ev.yard}</td>
+            <td>${ev.node || "—"}</td>
+            <td class="col-route">${ev.route || "—"}</td>
             <td>${ev.code}</td>
             <td>${ev.event}</td>
             <td class="col-day" style="font-weight: bold;">${ev.day}</td>
@@ -1437,8 +1498,13 @@ function calculateFleetRequirements() {
         const fontK = yardNorms[yard] ? yardNorms[yard].k : 12;
         const fontM = yardNorms[yard] ? yardNorms[yard].m : 6;
 
-        const virtualFleetRadio = document.querySelector('input[name="virtualFleetType"]:checked');
-        let yardVirtualType = virtualFleetRadio ? virtualFleetRadio.value : (availK >= availM ? 'kamag' : 'man');
+        // --- ІНДИВІДУАЛЬНИЙ ВИБІР ТИПУ ДОП. ТРАНСПОРТУ ДЛЯ ДВОРА ---
+        if (!yardVirtualTypes[yard]) {
+            yardVirtualTypes[yard] = (availK >= availM ? 'kamag' : 'man');
+        }
+        let yardVirtualType = yardVirtualTypes[yard];
+        // -----------------------------------------------------------
+
         let maxExtraK = 0;
         let maxExtraM = 0;
 
@@ -1549,7 +1615,15 @@ function renderKamagTable() {
         return;
     }
 
+    // --- СИНХРОНІЗУЄМО ПЕРЕМИКАЧ НА ЕКРАНІ З НАЛАШТУВАННЯМ ОБРАНОГО ДВОРА ---
+    if (typeof yardVirtualTypes !== 'undefined' && yardVirtualTypes[yard]) {
+        const radio = document.querySelector(`input[name="virtualFleetType"][value="${yardVirtualTypes[yard]}"]`);
+        if (radio && !radio.checked) radio.checked = true;
+    }
+    // ----------------------------------------------------------------------
+
     const savedScrollLeft = wrapper ? wrapper.scrollLeft : 0;
+
     const savedScrollTop = wrapper ? wrapper.scrollTop : 0;
 
     const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
@@ -1870,13 +1944,13 @@ function assignKamagsToEvents() {
                     st.kamag.forEach((isActive, kIndex) => {
                         const name = kIndex < availK ? `Kamag ${kIndex + 1}` : `Kamag ${kIndex + 1} (дод.)`;
                         if (isActive && !activeKamagsLog[`${y}_${d}_${h}_${name}`]) {
-                            yardEvents.push({ yard: y, code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
+                            yardEvents.push({ yard: y, node: "—", route: "—", code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
                         }
                     });
                     st.man.forEach((isActive, mIndex) => {
                         const name = mIndex < availM ? `Маневровий ${mIndex + 1}` : `Маневровий ${mIndex + 1} (дод.)`;
                         if (isActive && !activeKamagsLog[`${y}_${d}_${h}_${name}`]) {
-                            yardEvents.push({ yard: y, code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
+                            yardEvents.push({ yard: y, node: "—", route: "—", code: "—", event: "Чергування", day: d, time: `${String(h).padStart(2, '0')}:00`, absMins: getAbsoluteMinutes(d, `${String(h).padStart(2, '0')}:00`), kamag: name });
                         }
                     });
                 }
@@ -1898,7 +1972,7 @@ function getDetailedValues(item) {
 }
 
 function getEventsValues(ev) {
-    return [ev.yard, ev.code, ev.event, ev.day, getDayOfWeekFromDotStr(ev.day), ev.time];
+    return [ev.yard, ev.node || "", ev.route || "", ev.code, ev.event, ev.day, getDayOfWeekFromDotStr(ev.day), ev.time];
 }
 
 function filterDataArray(containerId, dataArray, valuesExtractor) {
@@ -1978,7 +2052,8 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
             filteredDetailedSchedules.forEach((item) => sheet.addRow(getDetailedValues(item)));
         } else if (tabEvents.classList.contains('active')) {
-            const headers = ["Автодвір", "Код", "Подія", "День", "День тижня", "Час"];
+            // Оновлюємо заголовки в Excel:
+            const headers = ["Автодвір", "Вузол", "Маршрут", "Код", "Подія", "День", "День тижня", "Час"];
             const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
             filteredYardEvents.forEach((ev) => sheet.addRow(getEventsValues(ev)));
         } else if (tabKamag.classList.contains('active')) {
@@ -2257,7 +2332,15 @@ document.getElementById('saveAllGoogleBtn').addEventListener('click', async () =
 document.addEventListener('DOMContentLoaded', () => {
     tabKamag.click();
     document.querySelectorAll('input[name="virtualFleetType"]').forEach(radio => {
-        radio.addEventListener('change', () => { if (Object.keys(totalOpsData).length > 0) calculateFleetRequirements(); });
+        radio.addEventListener('change', (e) => {
+            const currentYard = document.getElementById('kamagYardSelect').value;
+            if (currentYard) {
+                yardVirtualTypes[currentYard] = e.target.value; // Запам'ятовуємо вибір саме для цього двора!
+            }
+            if (Object.keys(totalOpsData).length > 0) {
+                calculateFleetRequirements();
+            }
+        });
     });
 });
 

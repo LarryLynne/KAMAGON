@@ -132,8 +132,9 @@ function getFactFleetRequirements(yard, dates) {
         }
     }
 
-    const virtualFleetRadio = document.querySelector('input[name="virtualFleetType"]:checked');
-    const yardVirtualType = virtualFleetRadio ? virtualFleetRadio.value : (availK >= availM ? 'kamag' : 'man');
+    let yardVirtualType = (typeof yardVirtualTypes !== 'undefined' && yardVirtualTypes[yard]) 
+        ? yardVirtualTypes[yard] 
+        : (availK >= availM ? 'kamag' : 'man');
 
     const hourlyRequirements = {};
     let maxExtraK = 0;
@@ -247,14 +248,16 @@ function processFactData(text) {
 
             // Считываем настройки нормативов и буферов
             let normPlacementBufferA = yardAConfig ? (yardAConfig.factPlacementBuffer || 0) : 0;
-            let normFirstContainerBufferA = yardAConfig ? (yardAConfig.factFirstContainerBuffer || 0) : 0;
+            let normFirstContainerBufferA = yardAConfig ? (yardAConfig.factFirstContainerBuffer || 0) : 0;     // Колонка P
+            let normSubsequentContainerBufferA = yardAConfig ? (yardAConfig.factLeaveBuffer || 0) : 0; // Колонка O
 
             // 1. Постановка на Автодворе А (всегда от Почала сканування назад)
             const dPlacementA = dStartLoad ? modifyMinutes(dStartLoad, -normPlacementBufferA) : null;
             
-            // 2. Забор на Автодворе А (Универсальная логика для всех контейнеров)
-            // Теперь строго: Конец сканирования конкретного контейнера + норматив из колонки P
-            const dRampLeaveA = dEndLoad ? modifyMinutes(dEndLoad, normFirstContainerBufferA) : null;
+            // 2. Забор на Автодворе А (Раздельная логика)
+            // Для первого контейнера берем норму из колонки P, для остальных — из колонки O
+            const currentLeaveBuffer = (containerOrder === 1) ? normFirstContainerBufferA : normSubsequentContainerBufferA;
+            const dRampLeaveA = dEndLoad ? modifyMinutes(dEndLoad, currentLeaveBuffer) : null;
 
             row.calculatedPlacement = dPlacementA;
             row.calculatedRampLeave = dRampLeaveA;
@@ -278,22 +281,22 @@ function processFactData(text) {
             // Логирование событий и накопление матрицы операций
             if (row.yardA !== "Невідомий автодвір") {
                 if (dPlacementA) {
-                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
+                    factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
                     recordMatrixOp(row.yardA, dPlacementA, "op1");
                 }
                 if (dRampLeaveA) {
-                    factCalculatedEvents.push({ yard: row.yardA, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "2. Забір", dateTime: dRampLeaveA });
+                    factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "2. Забір", dateTime: dRampLeaveA });
                     recordMatrixOp(row.yardA, dRampLeaveA, "op2");
                 }
             }
 
             if (row.yardB !== "Невідомий автодвір") {
                 if (dPlacementB) {
-                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "3. Постановка", dateTime: dPlacementB });
+                    factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "3. Постановка", dateTime: dPlacementB });
                     recordMatrixOp(row.yardB, dPlacementB, "op3");
                 }
                 if (dRampLeaveB) {
-                    factCalculatedEvents.push({ yard: row.yardB, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "4. Забір", dateTime: dRampLeaveB });
+                    factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "4. Забір", dateTime: dRampLeaveB });
                     recordMatrixOp(row.yardB, dRampLeaveB, "op4");
                 }
             }
@@ -626,21 +629,25 @@ function fillEventsContent(yard) {
     let html = `<style>
         #factEventsTable th, #factEventsTable td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 6px; }
     </style>
-    <table id="factEventsTable" style="table-layout: fixed; width: 1000px;"><thead><tr>
-        <th style="width:130px;">Автодвір<br><input type="text" class="fact-col-filter filter-input" data-col="0"></th>
-        <th style="width:90px;">День<br><input type="text" class="fact-col-filter filter-input" data-col="1"></th>
-        <th style="width:80px;">Час події<br><input type="text" class="fact-col-filter filter-input" data-col="2"></th>
-        <th style="width:80px;">Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="3"></th>
-        <th style="width:150px;">Причина створення<br><input type="text" class="fact-col-filter filter-input" data-col="4"></th>
-        <th style="width:100px;">Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="5"></th>
-        <th style="width:120px;">Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="6"></th>
-        <th style="width:150px;">Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="7"></th>
+    <table id="factEventsTable" style="table-layout: fixed; width: 1250px;"><thead><tr>
+        <th style="width:120px;">Автодвір<br><input type="text" class="fact-col-filter filter-input" data-col="0"></th>
+        <th style="width:100px;">Вузол<br><input type="text" class="fact-col-filter filter-input" data-col="1"></th>
+        <th style="width:140px;">Маршрут<br><input type="text" class="fact-col-filter filter-input" data-col="2"></th>
+        <th style="width:90px;">День<br><input type="text" class="fact-col-filter filter-input" data-col="3"></th>
+        <th style="width:80px;">Час події<br><input type="text" class="fact-col-filter filter-input" data-col="4"></th>
+        <th style="width:80px;">Рейс<br><input type="text" class="fact-col-filter filter-input" data-col="5"></th>
+        <th style="width:140px;">Причина ств.<br><input type="text" class="fact-col-filter filter-input" data-col="6"></th>
+        <th style="width:100px;">Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="7"></th>
+        <th style="width:110px;">Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="8"></th>
+        <th style="width:140px;">Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="9"></th>
     </tr></thead><tbody>`;
 
     filteredEvents.forEach(ev => {
         let opColor = (ev.eventType.startsWith("1") || ev.eventType.startsWith("3")) ? "color:#15803d;" : "color:#b45309;";
         html += `<tr>
             <td style="font-weight:bold; color:#475569;" title="${ev.yard}">${ev.yard}</td>
+            <td title="${ev.node || '—'}">${ev.node || '—'}</td>
+            <td class="col-route" title="${ev.route || '—'}">${ev.route || '—'}</td>
             <td style="font-weight:bold;" title="${formatDateOnly(ev.dateTime)}">${formatDateOnly(ev.dateTime)}</td>
             <td title="${formatTimeOnly(ev.dateTime)}">${formatTimeOnly(ev.dateTime)}</td>
             <td title="${ev.flight}">${ev.flight}</td>
@@ -744,13 +751,19 @@ function attachFactLiveFilters() {
         const flightsTable = document.getElementById('factFlightsTable');
 
         if (eventsTable && flightsTable) {
-            const evFlight = eventsTable.querySelector('.fact-col-filter[data-col="3"]'); 
-            const evReason = eventsTable.querySelector('.fact-col-filter[data-col="4"]'); 
-            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="5"]'); 
+            // Оновлені індекси для таблиці подій (через добавлені Вузол і Маршрут):
+            const evRoute = eventsTable.querySelector('.fact-col-filter[data-col="2"]'); 
+            const evFlight = eventsTable.querySelector('.fact-col-filter[data-col="5"]'); 
+            const evReason = eventsTable.querySelector('.fact-col-filter[data-col="6"]'); 
+            const evVehicle = eventsTable.querySelector('.fact-col-filter[data-col="7"]'); 
             
+            const flRoute = flightsTable.querySelector('.fact-col-filter[data-col="4"]'); 
             const flFlight = flightsTable.querySelector('.fact-col-filter[data-col="0"]'); 
-            const flReason = flightsTable.querySelector('.fact-col-filter[data-col="2"]'); // Зсунуто через стовпець "Дата та час"
-            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="6"]'); // Зсунуто через стовпець "Дата та час"
+            const flReason = flightsTable.querySelector('.fact-col-filter[data-col="2"]'); 
+            const flVehicle = flightsTable.querySelector('.fact-col-filter[data-col="6"]'); 
+
+            if (e.target === evRoute && flRoute) flRoute.value = evRoute.value;
+            if (e.target === flRoute && evRoute) evRoute.value = flRoute.value;
 
             if (e.target === evFlight && flFlight) flFlight.value = evFlight.value;
             if (e.target === flFlight && evFlight) evFlight.value = flFlight.value;
@@ -960,7 +973,8 @@ window.exportFactToExcel = async function(workbook) {
     headerRowF.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
 
     const sheetEvents = workbook.addWorksheet('Події (Факт)');
-    const eventHeaders = ["Автодвір (Аналітика)", "День", "Час події", "Рейс", "Номер ТЗ", "Контейнер", "Назва операції"];
+    // Оновлені заголовки в Excel:
+    const eventHeaders = ["Автодвір (Аналітика)", "Вузол", "Маршрут", "День", "Час події", "Рейс", "Номер ТЗ", "Контейнер", "Назва операції"];
     const headerRowE = sheetEvents.addRow(eventHeaders);
     headerRowE.font = { bold: true };
     headerRowE.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
@@ -1011,6 +1025,8 @@ window.exportFactToExcel = async function(workbook) {
         filteredEvents.forEach(ev => {
             sheetEvents.addRow([
                 yard, 
+                ev.node || '—',
+                ev.route || '—',
                 formatDateOnly(ev.dateTime),
                 formatTimeOnly(ev.dateTime),
                 ev.flight,
