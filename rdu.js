@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        const newVName = `${type} ${maxNum + 1}`;
+        const newVName = `${type} ${maxNum + 1}${maxNum + 1 > avail ? ' (дод.)' : ''}`;
         rduStateMatrix[dateStr][newVName] = Array(24).fill(0);
         
         renderRduGrid();
@@ -129,8 +129,8 @@ function renderRduGrid() {
     }
 
     const vehicleRows = [];
-    for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}`);
-    for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}`);
+    for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}${i > availK ? ' (дод.)' : ''}`);
+    for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}${i > availM ? ' (дод.)' : ''}`);
 
     vehicleRows.forEach(v => {
         if (!rduStateMatrix[dateStr][v]) rduStateMatrix[dateStr][v] = Array(24).fill(0);
@@ -285,6 +285,9 @@ async function loadRduFromGoogle() {
     const btn = document.getElementById('loadRduGoogleBtn');
     btn.innerText = "⏳...";
 
+    const availK = (typeof fleetDictionary !== 'undefined' && fleetDictionary[userYard]) ? fleetDictionary[userYard].kamag : 0;
+    const availM = (typeof fleetDictionary !== 'undefined' && fleetDictionary[userYard]) ? fleetDictionary[userYard].man : 0;
+
     try {
         const response = await fetch(`${RESULTS_SCRIPT_URL}?action=getRduAggregatedData&yard=${encodeURIComponent(userYard)}`);
         const data = await response.json();
@@ -311,7 +314,7 @@ async function loadRduFromGoogle() {
                     if (kStr) {
                         const kBits = kStr.split(',').map(Number);
                         kBits.forEach((bit, idx) => {
-                            const vName = `Kamag ${idx + 1}`;
+                            const vName = `Kamag ${idx + 1}${idx + 1 > availK ? ' (дод.)' : ''}`;
                             if (!rduStateMatrix[dateStr][vName]) rduStateMatrix[dateStr][vName] = Array(24).fill(0);
                             rduStateMatrix[dateStr][vName][hour] = bit;
                         });
@@ -319,7 +322,7 @@ async function loadRduFromGoogle() {
                     if (mStr) {
                         const mBits = mStr.split(',').map(Number);
                         mBits.forEach((bit, idx) => {
-                            const vName = `Маневровий ${idx + 1}`;
+                            const vName = `Маневровий ${idx + 1}${idx + 1 > availM ? ' (дод.)' : ''}`;
                             if (!rduStateMatrix[dateStr][vName]) rduStateMatrix[dateStr][vName] = Array(24).fill(0);
                             rduStateMatrix[dateStr][vName][hour] = bit;
                         });

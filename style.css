@@ -1251,3 +1251,23 @@ td.sticky-col {
     left: auto;
     right: 0;
 }
+
+/* Кнопка "База Даних" для Адміна */
+.btn-admin-db {
+    background-color: #fff3cd;
+    color: #827717;
+    border-color: #ffe082;
+    text-decoration: none;
+    height: 34px;
+    box-sizing: border-box;
+    display: none; /* За замовчуванням прихована, JS сам увімкне inline-flex для Адміна */
+}
+
+.btn-admin-db:hover {
+    background-color: #ffe8a1;
+    color: #6c6307;
+}
+
+.btn-admin-db:active {
+    background-color: #ffd866;
+}

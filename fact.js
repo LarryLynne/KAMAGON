@@ -212,7 +212,8 @@ function processFactData(text) {
             nodeA: cols[8], 
             nodeB: cols[9], 
             vehicle: cols[10],
-            container: cols[11] || '—'
+            container: cols[11] || '—',
+            deliveryType: cols[12] || '—' // <-- ДОДАНО ТУТ
         });
     }
 
@@ -281,22 +282,22 @@ function processFactData(text) {
             // Логирование событий и накопление матрицы операций
             if (row.yardA !== "Невідомий автодвір") {
                 if (dPlacementA) {
-                    factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "1. Постановка", dateTime: dPlacementA });
+                    factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "1. Постановка", dateTime: dPlacementA });
                     recordMatrixOp(row.yardA, dPlacementA, "op1");
                 }
                 if (dRampLeaveA) {
-                    factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "2. Забір", dateTime: dRampLeaveA });
+                    factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "2. Забір", dateTime: dRampLeaveA });
                     recordMatrixOp(row.yardA, dRampLeaveA, "op2");
                 }
             }
 
             if (row.yardB !== "Невідомий автодвір") {
                 if (dPlacementB) {
-                    factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "3. Постановка", dateTime: dPlacementB });
+                    factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "3. Постановка", dateTime: dPlacementB });
                     recordMatrixOp(row.yardB, dPlacementB, "op3");
                 }
                 if (dRampLeaveB) {
-                    factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, eventType: "4. Забір", dateTime: dRampLeaveB });
+                    factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "4. Забір", dateTime: dRampLeaveB });
                     recordMatrixOp(row.yardB, dRampLeaveB, "op4");
                 }
             }
@@ -576,6 +577,14 @@ function fillCalculatedFleetMatrix(yard) {
     html += `<td class="fact-chart-td-end"></td></tr>`;
 
     html += `</tbody></table>`;
+    /*html += `
+    <div style="margin-top: 15px; padding: 12px 15px; background: #f8fafc; border: 1px solid #dee2e6; border-radius: 6px; font-size: 11px; color: #475569; display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
+        <div style="font-weight: bold; color: #1e293b; font-size: 12px; margin-right: 10px;">🎨 Легенда:</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#ffaa00; border-radius:3px; border:1px solid #d97706;"></span> Розрахований фіз. флот</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#ffe0b2; border-radius:3px; border:1px solid #f59e0b;"></span> Розрахований вірт. флот (дод.)</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#fff9c4; border-radius:3px; border:1px solid #fcd34d;"></span> Кількість операцій</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; background:#ffebee; color:#d32f2f; font-weight:bold; border-radius:3px; border:1px solid #fca5a5;">1</span> Непокриті операції</div>
+    </div>`;*/
     container.innerHTML = html;
 
     if (window.myFactDayCharts) window.myFactDayCharts.forEach(c => c.destroy());
@@ -639,7 +648,8 @@ function fillEventsContent(yard) {
         <th style="width:140px;">Причина ств.<br><input type="text" class="fact-col-filter filter-input" data-col="6"></th>
         <th style="width:100px;">Номер ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="7"></th>
         <th style="width:110px;">Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="8"></th>
-        <th style="width:140px;">Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="9"></th>
+        <th style="width:130px;">Тип доставки<br><input type="text" class="fact-col-filter filter-input" data-col="9"></th>
+        <th style="width:140px;">Назва операції<br><input type="text" class="fact-col-filter filter-input" data-col="10"></th>
     </tr></thead><tbody>`;
 
     filteredEvents.forEach(ev => {
@@ -654,6 +664,7 @@ function fillEventsContent(yard) {
             <td style="color:#64748b; font-weight:500;" title="${ev.reason || '—'}">${ev.reason || '—'}</td>
             <td style="font-weight:bold; color:#0369a1;" title="${ev.vehicle}">${ev.vehicle}</td>
             <td style="font-weight:bold; color:#475569;" title="${ev.container || '—'}">${ev.container || '—'}</td>
+            <td style="color:#334155;" title="${ev.deliveryType || '—'}">${ev.deliveryType || '—'}</td>
             <td style="font-weight:bold; ${opColor}" title="${ev.eventType}">${ev.eventType}</td>
         </tr>`;
     });
@@ -691,18 +702,19 @@ function fillFlightsContent(yard) {
         <th style="width:80px;">Відомість<br><input type="text" class="fact-col-filter filter-input" data-col="5"></th>
         <th style="width:80px;">ТЗ<br><input type="text" class="fact-col-filter filter-input" data-col="6"></th>
         <th style="width:90px;">Контейнер<br><input type="text" class="fact-col-filter filter-input" data-col="7"></th>
-        <th style="width:100px;">Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="8"></th>
-        <th style="width:100px;">Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="9"></th>
-        <th style="width:65px;">1. Пост.<br><input type="text" class="fact-col-filter filter-input" data-col="10"></th>
-        <th style="width:65px;">Поч. скан.<br><input type="text" class="fact-col-filter filter-input" data-col="11"></th>
-        <th style="width:65px;">Кін. скан.<br><input type="text" class="fact-col-filter filter-input" data-col="12"></th>
-        <th style="width:65px;">2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="13"></th>
-        <th style="width:65px;">Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="14"></th>
-        <th style="width:100px;">Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="15"></th>
-        <th style="width:100px;">Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="16"></th>
-        <th style="width:65px;">Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="17"></th>
-        <th style="width:65px;">3. Пост.<br><input type="text" class="fact-col-filter filter-input" data-col="18"></th>
-        <th style="width:65px;">4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="19"></th>
+        <th style="width:130px;">Тип доставки<br><input type="text" class="fact-col-filter filter-input" data-col="8"></th>
+        <th style="width:100px;">Автодвір А<br><input type="text" class="fact-col-filter filter-input" data-col="9"></th>
+        <th style="width:100px;">Вузол А<br><input type="text" class="fact-col-filter filter-input" data-col="10"></th>
+        <th style="width:65px;">1. Пост.<br><input type="text" class="fact-col-filter filter-input" data-col="11"></th>
+        <th style="width:65px;">Поч. скан.<br><input type="text" class="fact-col-filter filter-input" data-col="12"></th>
+        <th style="width:65px;">Кін. скан.<br><input type="text" class="fact-col-filter filter-input" data-col="13"></th>
+        <th style="width:65px;">2. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="14"></th>
+        <th style="width:65px;">Виїзд<br><input type="text" class="fact-col-filter filter-input" data-col="15"></th>
+        <th style="width:100px;">Автодвір Б<br><input type="text" class="fact-col-filter filter-input" data-col="16"></th>
+        <th style="width:100px;">Вузол Б<br><input type="text" class="fact-col-filter filter-input" data-col="17"></th>
+        <th style="width:65px;">Приїзд<br><input type="text" class="fact-col-filter filter-input" data-col="18"></th>
+        <th style="width:65px;">3. Пост.<br><input type="text" class="fact-col-filter filter-input" data-col="19"></th>
+        <th style="width:65px;">4. Забір<br><input type="text" class="fact-col-filter filter-input" data-col="20"></th>
     </tr></thead><tbody>`;
 
     filtered.forEach(f => {
@@ -719,6 +731,7 @@ function fillFlightsContent(yard) {
             <td title="${f.statement}">${f.statement}</td>
             <td style="font-weight:bold; color:#0369a1;" title="${f.vehicle}">${f.vehicle}</td>
             <td style="font-weight:bold; color:#475569;" title="${f.container || '—'}">${f.container || '—'}</td>
+            <td style="color:#334155;" title="${f.deliveryType || '—'}">${f.deliveryType || '—'}</td>
             <td title="${f.yardA}">${f.yardA}</td><td title="${f.nodeA}">${f.nodeA}</td>
             <td style="color:#15803d; font-weight:bold;" title="${formatTimeOnly(f.calculatedPlacement)}">${formatTimeOnly(f.calculatedPlacement)}</td>
             <td title="${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}">${f.startLoadStr ? f.startLoadStr.split(' ')[1] : '—'}</td>
@@ -964,7 +977,7 @@ window.exportFactToExcel = async function(workbook) {
     // Створюємо рівно два майстер-листи для накопичення даних
     const sheetFlights = workbook.addWorksheet('Рейси (Факт)');
     const flightHeaders = [
-        "Автодвір (Аналітика)", "Рейс", "Дата та час", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер",
+        "Автодвір (Аналітика)", "Рейс", "Дата та час", "Причина створення", "Порядок", "Маршрут", "Відомість", "ТЗ", "Контейнер", "Тип доставки",
         "Автодвір А", "Вузол А", "1. Постановка", "Початок скан.", "Кінець скан.", "2. Забір", "Виїзд",
         "Автодвір Б", "Вузол Б", "Приїзд", "3. Постановка", "4. Забір"
     ];
@@ -973,8 +986,11 @@ window.exportFactToExcel = async function(workbook) {
     headerRowF.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
 
     const sheetEvents = workbook.addWorksheet('Події (Факт)');
-    // Оновлені заголовки в Excel:
-    const eventHeaders = ["Автодвір (Аналітика)", "Вузол", "Маршрут", "День", "Час події", "Рейс", "Номер ТЗ", "Контейнер", "Назва операції"];
+    // ВИПРАВЛЕНО: Додано заголовок "Причина створення" для усунення зсуву колонок:
+    const eventHeaders = [
+        "Автодвір (Аналітика)", "Вузол", "Маршрут", "День", "Час події", "Рейс", 
+        "Причина створення", "Номер ТЗ", "Контейнер", "Тип доставки", "Назва операції"
+    ];
     const headerRowE = sheetEvents.addRow(eventHeaders);
     headerRowE.font = { bold: true };
     headerRowE.eachCell(cell => { cell.fill = fillHeader; cell.alignment = alignCenter; });
@@ -1007,6 +1023,7 @@ window.exportFactToExcel = async function(workbook) {
                 f.statement,
                 f.vehicle,
                 f.container || '—',
+                f.deliveryType || '—',
                 f.yardA,
                 f.nodeA,
                 formatTimeOnly(f.calculatedPlacement),
@@ -1030,10 +1047,11 @@ window.exportFactToExcel = async function(workbook) {
                 formatDateOnly(ev.dateTime),
                 formatTimeOnly(ev.dateTime),
                 ev.flight,
-                ev.reason || '—',
-                ev.vehicle,
-                ev.container || '—',
-                ev.eventType
+                ev.reason || '—',       // Тепер точно стає під заголовок "Причина створення"
+                ev.vehicle,             // Стає під "Номер ТЗ"
+                ev.container || '—',    // Стає під "Контейнер"
+                ev.deliveryType || '—', // Стає під "Тип доставки"
+                ev.eventType            // Стає під "Назва операції"
             ]);
         });
     }

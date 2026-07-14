@@ -86,6 +86,23 @@ function updateAuthVisibility() {
     const role = sessionStorage.getItem('kamagonAuthRole');
     const userYard = sessionStorage.getItem('kamagonAuthYard');
     const loginBtn = document.getElementById('loginBtn');
+
+    const exportGroup = document.querySelector('.export-group');
+    if (exportGroup && !document.getElementById('adminGoogleLink')) {
+        const adminLink = document.createElement('a');
+        adminLink.id = 'adminGoogleLink';
+        adminLink.href = 'https://docs.google.com/spreadsheets/d/1Pjp5PP1sCR5R9MORAG9JmgcPG4y0q955vJ-T8FajAXs/edit'; // Твоє посилання
+        adminLink.target = '_blank';
+        // ДОДАЄМО НАШ НОВИЙ КЛАС btn-admin-db:
+        adminLink.className = 'tab-btn btn-action btn-admin-db'; 
+        adminLink.innerHTML = 'База Даних';
+        exportGroup.insertBefore(adminLink, exportGroup.firstChild);
+    }
+    
+    const adminLinkNode = document.getElementById('adminGoogleLink');
+    if (adminLinkNode) {
+        adminLinkNode.style.display = (isAuth && role === 'Адмін') ? 'inline-flex' : 'none';
+    }
     
     // 1. Базово переключаем элементы с классом auth-hidden
     document.querySelectorAll('.auth-hidden').forEach(el => {
@@ -1030,7 +1047,8 @@ function initDetailedTable() {
         <th data-sort="timeUnloadStart" class="sortable" style="background-color: #cce5ff;">Постановка (вивант.)<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="timeUnloadEnd" class="sortable" style="background-color: #cce5ff;">Кінець вивант.<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort="vehicle" class="sortable">Тип ТЗ<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
-    </tr></thead><tbody id="detailedTableBody"></tbody></table>`;
+        <th data-sort="deliveryType" class="sortable">Тип доставки<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
+        </tr></thead><tbody id="detailedTableBody"></tbody></table>`;
     
     container.innerHTML = html;
     detailedRenderedCount = 0;
@@ -1064,6 +1082,7 @@ function renderDetailedChunk() {
             <td style="text-align: center; color: #0056b3; font-weight: bold;">${item.timeUnloadStart}</td>
             <td style="text-align: center; color: #0056b3; font-weight: bold;">${item.timeUnloadEnd}</td>
             <td>${item.vehicle}</td>
+            <td>${item.deliveryType || "—"}</td>
         </tr>`;
     }
     tbody.insertAdjacentHTML('beforeend', html);
@@ -1321,7 +1340,7 @@ function generateYardEvents() {
         return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
     });
 
-    const addEvent = (yard, nodeName, eventIndex, eventName, absMins, code, route) => {
+    const addEvent = (yard, nodeName, eventIndex, eventName, absMins, code, route, deliveryType) => {
         if (absMins === Infinity || isNaN(absMins)) return;
         const yardConf = yardDictionary[nodeName];
         let flag = 0;
@@ -1339,8 +1358,8 @@ function generateYardEvents() {
             
             if (allowedDates.length > 0 && !allowedDates.includes(parts[0])) return;
 
-            // Додаємо node та route в об'єкт події:
-            yardEvents.push({ yard: yard, node: nodeName, route: route || "—", code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins });
+            // Додаємо deliveryType в об'єкт події:
+            yardEvents.push({ yard: yard, node: nodeName, route: route || "—", code: code, event: eventName, day: parts[0], time: parts[1], absMins: absMins, deliveryType: deliveryType || "—" });
         }
     };
 
@@ -1349,7 +1368,8 @@ function generateYardEvents() {
 
         if (item.moveType && item.moveType.toLowerCase().includes("порожній")) {
             if (item.yardB && item.yardB !== "—") {
-                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(item.day, item.timeArrivalB), item.originalCode, item.originalRoute);
+                // ДОДАНО item.deliveryType в кінці
+                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(item.day, item.timeArrivalB), item.originalCode, item.originalRoute, item.deliveryType);
             }
             return; 
         }
@@ -1360,58 +1380,25 @@ function generateYardEvents() {
 
             if (item.timePlacementA && item.timePlacementA !== "—") {
                 const parts = item.timePlacementA.split(' ');
-                addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute);
+                // ДОДАНО item.deliveryType в кінці
+                addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute, item.deliveryType);
             }
             if (item.timeDepartureA && item.timeDepartureA !== "—") {
-                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - bufferA, item.originalCode, item.originalRoute);
+                // ДОДАНО item.deliveryType в кінці
+                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - bufferA, item.originalCode, item.originalRoute, item.deliveryType);
             }
         }
         
         if (item.yardB && item.yardB !== "—") {
             if (item.timeUnloadStart && item.timeUnloadStart !== "—") {
                 const parts = item.timeUnloadStart.split(' ');
-                addEvent(item.yardB, item.nodeB, 3, "3. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute);
+                // ДОДАНО item.deliveryType в кінці
+                addEvent(item.yardB, item.nodeB, 3, "3. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute, item.deliveryType);
             }
             if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
                 const parts = item.timeUnloadEnd.split(' ');
-                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute);
-            }
-        }
-    });
-
-    detailedSchedules.forEach(item => {
-        if (item.vehicle !== "Шасі BDF") return;
-
-        if (item.moveType && item.moveType.toLowerCase().includes("порожній")) {
-            if (item.yardB && item.yardB !== "—") {
-                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(item.day, item.timeArrivalB), item.originalCode);
-            }
-            return; 
-        }
-
-        if (item.yardA && item.yardA !== "—") {
-            const yardConf = yardDictionary[item.nodeA];
-            // Вытягиваем буфер из настроек, если его нет — страхуемся дефолтными 15 минутами
-            const bufferA = (yardConf && yardConf.planLeaveBuffer !== undefined) ? yardConf.planLeaveBuffer : 15;
-
-            if (item.timePlacementA && item.timePlacementA !== "—") {
-                const parts = item.timePlacementA.split(' ');
-                addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
-            }
-            if (item.timeDepartureA && item.timeDepartureA !== "—") {
-                // Вместо хардкода -15 используем динамический буфер
-                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - bufferA, item.originalCode);
-            }
-        }
-        
-        if (item.yardB && item.yardB !== "—") {
-            if (item.timeUnloadStart && item.timeUnloadStart !== "—") {
-                const parts = item.timeUnloadStart.split(' ');
-                addEvent(item.yardB, item.nodeB, 3, "3. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
-            }
-            if (item.timeUnloadEnd && item.timeUnloadEnd !== "—") {
-                const parts = item.timeUnloadEnd.split(' ');
-                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode);
+                // ДОДАНО item.deliveryType в кінці
+                addEvent(item.yardB, item.nodeB, 4, "4. Забір", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute, item.deliveryType);
             }
         }
     });
@@ -1437,7 +1424,8 @@ function initEventsTable() {
         <th data-sort-event="day" class="sortable col-day">День<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th>День тижня<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
         <th data-sort-event="time" class="sortable">Час<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
-    </tr></thead><tbody id="eventsTableBody"></tbody></table>`;
+        <th>Тип доставки<br><input type="text" class="filter-input" data-col="${c++}" onclick="event.stopPropagation()"></th>
+        </tr></thead><tbody id="eventsTableBody"></tbody></table>`;
     
     container.innerHTML = html;
     eventsRenderedCount = 0;
@@ -1464,6 +1452,7 @@ function renderEventsChunk() {
             <td class="col-day" style="font-weight: bold;">${ev.day}</td>
             <td style="text-align: center; font-weight: bold; color: #495057;">${getDayOfWeekFromDotStr(ev.day)}</td>
             <td style="text-align: center;">${ev.time}</td>
+            <td style="text-align: center;">${ev.deliveryType || "—"}</td>
         </tr>`;
     }
     tbody.insertAdjacentHTML('beforeend', html);
@@ -1968,11 +1957,11 @@ function getRawValues(item) {
 }
 
 function getDetailedValues(item) {
-    return [item.originalRoute, item.originalCode, item.day, getDayOfWeekFromDotStr(item.day), item.miniSchema, item.containerType, item.yardA, item.timePlacementA || "—", item.nodeA, item.timeDepartureA, item.yardB, item.nodeB, item.timeArrivalB, item.timeUnloadStart, item.timeUnloadEnd, item.vehicle];
+    return [item.originalRoute, item.originalCode, item.day, getDayOfWeekFromDotStr(item.day), item.miniSchema, item.containerType, item.yardA, item.timePlacementA || "—", item.nodeA, item.timeDepartureA, item.yardB, item.nodeB, item.timeArrivalB, item.timeUnloadStart, item.timeUnloadEnd, item.vehicle, item.deliveryType || "—"];
 }
 
 function getEventsValues(ev) {
-    return [ev.yard, ev.node || "", ev.route || "", ev.code, ev.event, ev.day, getDayOfWeekFromDotStr(ev.day), ev.time];
+    return [ev.yard, ev.node || "", ev.route || "", ev.code, ev.event, ev.day, getDayOfWeekFromDotStr(ev.day), ev.time, ev.deliveryType || "—"];
 }
 
 function filterDataArray(containerId, dataArray, valuesExtractor) {
@@ -2048,12 +2037,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
             filteredAllSchedules.forEach(item => sheet.addRow(getRawValues(item)));
         } else if (tabDetailed.classList.contains('active')) {
-            const headers = ["Маршрут", "Код", "День", "День тижня", "Схема", "Тип", "Автодвір А", "Постановка", "Точка А", "Виїзд", "Автодвір Б", "Точка Б", "Приїзд", "Постановка (вивант.)", "Кінець вивант.", "Тип ТЗ"];
+            const headers = ["Маршрут", "Код", "День", "День тижня", "Схема", "Тип", "Автодвір А", "Постановка", "Точка А", "Виїзд", "Автодвір Б", "Точка Б", "Приїзд", "Постановка (вивант.)", "Кінець вивант.", "Тип ТЗ", "Тип доставки"];
             const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
             filteredDetailedSchedules.forEach((item) => sheet.addRow(getDetailedValues(item)));
         } else if (tabEvents.classList.contains('active')) {
-            // Оновлюємо заголовки в Excel:
-            const headers = ["Автодвір", "Вузол", "Маршрут", "Код", "Подія", "День", "День тижня", "Час"];
+            const headers = ["Автодвір", "Вузол", "Маршрут", "Код", "Подія", "День", "День тижня", "Час", "Тип доставки"];
             const sheet = workbook.addWorksheet('Звіт'); sheet.addRow(headers);
             filteredYardEvents.forEach((ev) => sheet.addRow(getEventsValues(ev)));
         } else if (tabKamag.classList.contains('active')) {

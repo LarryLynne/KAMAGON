@@ -112,8 +112,8 @@ async function loadUnifiedCompareData() {
         }
 
         const vehicleRows = [];
-        for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}`);
-        for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}`);
+        for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}${i > availK ? ' (дод.)' : ''}`);
+        for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}${i > availM ? ' (дод.)' : ''}`);
 
         const planFleet = {}, rduFleet = {};
         const planOps = {}, autoFactOps = {};
@@ -154,12 +154,22 @@ async function loadUnifiedCompareData() {
                 const [kStr, mStr] = String(row[3]).split('|');
                 if (kStr) {
                     kStr.split(',').forEach((bit, idx) => {
-                        if (idx < maxK) planFleet[`Kamag ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0;
+                        if (idx < maxK) {
+                            const vName = `Kamag ${idx+1}${idx+1 > availK ? ' (дод.)' : ''}`;
+                            if (planFleet[vName] && planFleet[vName][dStr]) {
+                                planFleet[vName][dStr][h] = parseInt(bit, 10) || 0;
+                            }
+                        }
                     });
                 }
                 if (mStr) {
                     mStr.split(',').forEach((bit, idx) => {
-                        if (idx < maxM) planFleet[`Маневровий ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0;
+                        if (idx < maxM) {
+                            const vName = `Маневровий ${idx+1}${idx+1 > availM ? ' (дод.)' : ''}`;
+                            if (planFleet[vName] && planFleet[vName][dStr]) {
+                                planFleet[vName][dStr][h] = parseInt(bit, 10) || 0;
+                            }
+                        }
                     });
                 }
             });
@@ -171,13 +181,6 @@ async function loadUnifiedCompareData() {
                 if (!datesList.includes(dStr)) return;
                 const h = parseInt(row[2], 10);
                 autoFactOps[dStr][h] = parseInt(row[4], 10) || 0;
-
-                //const [kStr, mStr] = String(row[3]).split('|');
-                //let activeK = 0, activeM = 0;
-                //if (kStr) activeK = kStr.split(',').map(Number).filter(Boolean).length;
-                //if (mStr) activeM = mStr.split(',').map(Number).filter(Boolean).length;
-
-                //autoFactCap[dStr][h] = (activeK * yardNorms.k) + (activeM * yardNorms.m);
             });
         }
 
@@ -190,12 +193,22 @@ async function loadUnifiedCompareData() {
                 const [kStr, mStr] = String(row[3]).split('|');
                 if (kStr) {
                     kStr.split(',').forEach((bit, idx) => {
-                        if (idx < maxK) rduFleet[`Kamag ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0;
+                        if (idx < maxK) {
+                            const vName = `Kamag ${idx+1}${idx+1 > availK ? ' (дод.)' : ''}`;
+                            if (rduFleet[vName] && rduFleet[vName][dStr]) {
+                                rduFleet[vName][dStr][h] = parseInt(bit, 10) || 0;
+                            }
+                        }
                     });
                 }
                 if (mStr) {
                     mStr.split(',').forEach((bit, idx) => {
-                        if (idx < maxM) rduFleet[`Маневровий ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0;
+                        if (idx < maxM) {
+                            const vName = `Маневровий ${idx+1}${idx+1 > availM ? ' (дод.)' : ''}`;
+                            if (rduFleet[vName] && rduFleet[vName][dStr]) {
+                                rduFleet[vName][dStr][h] = parseInt(bit, 10) || 0;
+                            }
+                        }
                     });
                 }
             });
@@ -204,8 +217,14 @@ async function loadUnifiedCompareData() {
         datesList.forEach(dStr => {
             for (let h = 0; h < 24; h++) {
                 let activeK = 0, activeM = 0;
-                for (let i = 1; i <= maxK; i++) if (planFleet[`Kamag ${i}`][dStr][h] === 1) activeK++;
-                for (let i = 1; i <= maxM; i++) if (planFleet[`Маневровий ${i}`][dStr][h] === 1) activeM++;
+                for (let i = 1; i <= maxK; i++) {
+                    const vName = `Kamag ${i}${i > availK ? ' (дод.)' : ''}`;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeK++;
+                }
+                for (let i = 1; i <= maxM; i++) {
+                    const vName = `Маневровий ${i}${i > availM ? ' (дод.)' : ''}`;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeM++;
+                }
                 planCap[dStr][h] = (activeK * yardNorms.k) + (activeM * yardNorms.m);
             }
         });
@@ -213,8 +232,14 @@ async function loadUnifiedCompareData() {
         datesList.forEach(dStr => {
             for (let h = 0; h < 24; h++) {
                 let activeK = 0, activeM = 0;
-                for (let i = 1; i <= maxK; i++) if (rduFleet[`Kamag ${i}`][dStr][h] === 1) activeK++;
-                for (let i = 1; i <= maxM; i++) if (rduFleet[`Маневровий ${i}`][dStr][h] === 1) activeM++;
+                for (let i = 1; i <= maxK; i++) {
+                    const vName = `Kamag ${i}${i > availK ? ' (дод.)' : ''}`;
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeK++;
+                }
+                for (let i = 1; i <= maxM; i++) {
+                    const vName = `Маневровий ${i}${i > availM ? ' (дод.)' : ''}`;
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeM++;
+                }
                 autoFactCap[dStr][h] = (activeK * yardNorms.k) + (activeM * yardNorms.m);
             }
         });
@@ -247,7 +272,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     let html = `<h3 style="margin: 5px 0; color: #334155; border-left: 4px solid #ea580c; padding-left: 10px;">Порівняльна матриця роботи ТЗ</h3>
     <table><thead><tr><th class="sticky-col" style="min-width: 150px;" rowspan="2">ТЗ / Стан</th>`;
     
-    // 1. ВЕРХНІЙ РЯДОК ШАПКИ: Дати + Дні тижня (Тут усе супер)
+    // 1. ВЕРХНІЙ РЯДОК ШАПКИ: Дати + Дні тижня
     datesList.forEach(dStr => {
         const [dd, mm, yyyy] = dStr.split('.').map(Number);
         const dateObj = new Date(yyyy, mm - 1, dd);
@@ -260,7 +285,7 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     html += `<th rowspan="2" style="background-color: #cbd5e1; font-weight:bold; min-width:55px; vertical-align: middle;">Разом План</th>
              <th rowspan="2" style="background-color: #cbd5e1; font-weight:bold; min-width:45px; vertical-align: middle;">Разом РДУ</th></tr><tr>`;
 
-    // 2. ДРУГИЙ РЯДОК ШАПКИ: Повертаємо години назад замість дубля дат!
+    // 2. ДРУГИЙ РЯДОК ШАПКИ: Години
     datesList.forEach(dStr => {
         for (let h = 0; h < 24; h++) {
             html += `<th class="kamag-header-vertical" style="height:30px; ${h === 0 ? 'border-left: 2px solid #6c757d;' : ''}">${h}:00</th>`;
@@ -319,15 +344,14 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
                  <td style="text-align:center; font-weight:bold; background-color:#cbd5e1;">${grandRduHours || ''}</td></tr>`;
     });
 
-    // Рядок з графіками (Тут виправлено: ставимо 24 години окремо, а суми закриваємо порожніми клітинками)
+    // Рядок з графіками
     html += `<tr><td class="sticky-col" style="font-weight:bold; background-color:#fff; vertical-align: middle;">Графік роботи</td>`;
     datesList.forEach((dStr, index) => {
         html += `<td colspan="24" style="padding: 0; background: #fff; vertical-align: bottom; border-left: 2px solid #6c757d;">
-            <div style="height: 220px; width: 100%; overflow: hidden;">
+            <div style="height: 250px; width: 100%; overflow: hidden;">
                 <canvas id="combinedCompareChart_${index}"></canvas>
             </div>
         </td>`;
-        // Заглушка під колонками сум Σ П и Σ Р, щоб графік не розтягувався на них
         html += `<td colspan="2" style="background-color:#ffffff; border-right: 2px solid #6c757d;"></td>`;
     });
     html += `<td style="background-color:#cbd5e1;"></td><td style="background-color:#cbd5e1;"></td></tr>`;
@@ -337,7 +361,6 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
         <h3 style="margin: 0; color: #334155; border-left: 4px solid #10b981; padding-left: 10px; text-align: left;">Сумарні дані по операціям за період</h3>
     </td></tr>`;
     
-    // Шапка годин для операцій з днями тижня
     html += `<tr style="background-color: #f8fafc;"><th class="sticky-col" style="min-width: 150px; text-align: left;" rowspan="2">Параметр / Години</th>`;
     datesList.forEach(dStr => {
         const [dd, mm, yyyy] = dStr.split('.').map(Number);
@@ -410,6 +433,18 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     html += `<td colspan="2" style="text-align:center; font-weight:bold; background-color:#cbd5e1; ${grandDiffStyle}">${grandDiffOps}</td></tr>`;
     
     html += `</tbody></table>`;
+    
+    // --- ДОДАЄМО ЛЕГЕНДУ ЗВІРКИ ВНИЗУ ТАБЛИЦІ (ВКЛАДКА РЕЗУЛЬТАТИ) ---
+    /*html += `
+    <div style="margin: 15px 0 25px 0; padding: 12px 15px; background: #f8fafc; border: 1px solid #dee2e6; border-radius: 6px; font-size: 11px; color: #475569; display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
+        <div style="font-weight: bold; color: #1e293b; font-size: 12px; margin-right: 5px;">🎨 Легенда звірки:</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#ea580c; border-radius:3px;"></span> 1 — Збіг (План = РДУ)</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#be123c; border-radius:3px;"></span> 1 — Надлишок (РДУ > План)</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#ffedd5; border:1px solid #fed7aa; border-radius:3px;"></span> 0 — Простій (План > РДУ)</div>
+        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#fff; border:1px solid #ccc; border-radius:3px;"></span> 0 — Не задіяно (План 0, РДУ 0)</div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;"><span style="display:inline-block; padding: 2px 6px; background:#f0fdf4; color:#16a34a; font-weight:bold; border-radius:3px;">+</span><span style="display:inline-block; padding: 2px 6px; background:#fef2f2; color:#dc2626; font-weight:bold; border-radius:3px;">-</span> Різниця операцій (Факт мінус План)</div>
+    </div>`;*/
+
     container.innerHTML = html;
 }
 
@@ -426,7 +461,7 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
 
         const parentDiv = ctx.parentElement;
         ctx.width = parentDiv.clientWidth;
-        ctx.height = 220;
+        ctx.height = 250; // Збільшили висоту, щоб влізла легенда
 
         const labels = [];
         for (let h = 0; h < 24; h++) labels.push(`${h}:00`);
@@ -439,7 +474,7 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
                     { type: 'bar', label: 'Операції (План)', data: planOps[dateStr], backgroundColor: 'rgba(255, 170, 0, 0.6)', borderColor: '#ffaa00', borderWidth: 1, borderRadius: 2, order: 3 },
                     { type: 'bar', label: 'Операції (Факт)', data: autoFactOps[dateStr], backgroundColor: 'rgba(16, 185, 129, 0.6)', borderColor: '#10b981', borderWidth: 1, borderRadius: 2, order: 4 },
                     { type: 'line', label: 'Транспорт (План)', data: planCap[dateStr], borderColor: '#2563eb', backgroundColor: '#2563eb', borderWidth: 2.5, tension: 0.2, pointRadius: 2, order: 1 },
-                    { type: 'line', label: 'Транспорт (РДУ)', data: autoFactCap[dateStr], borderColor: '#dc2626', backgroundColor: '#dc2626', borderWidth: 2.5, tension: 0.2, pointRadius: 2, order: 2 }
+                    { type: 'line', label: 'Транспорт (Факт)', data: autoFactCap[dateStr], borderColor: '#dc2626', backgroundColor: '#dc2626', borderWidth: 2.5, tension: 0.2, pointRadius: 2, order: 2 }
                 ]
             },
             options: {
@@ -449,14 +484,13 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
                 interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: { 
-                        display: true, // ВКЛЮЧАЕМ ОСЬ X ДЛЯ ЧАСОВ
+                        display: true,
                         grid: { display: false },
                         ticks: {
                             font: { size: 9, weight: 'bold' },
                             maxRotation: 0,
-                            autoSkip: false, // Отображаем каждый час без пропусков
+                            autoSkip: false,
                             callback: function(val, idx) {
-                                // Превращаем "5:00" в компактное числовие "5" под каждым столбцом
                                 return this.getLabelForValue(val).replace(':00', '');
                             }
                         }
@@ -464,12 +498,19 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
                     y: { 
                         type: 'linear', 
                         beginAtZero: true, 
-                        display: false // ОТКЛЮЧАЕМ ОСЬ Y ДЛЯ ИДЕАЛЬНОГО ПОПАДАНИЯ В СЕТКУ МАТРИЦЫ
+                        display: false 
                     }
                 },
                 plugins: {
                     legend: { 
-                        display: false // ОТКЛЮЧАЕМ ВНУТРЕННЮЮ ЛЕГЕНДУ (ОНА ТЕПЕРЬ СВЕРХУ В HTML)
+                        display: true,           // ВМИКАЄМО ЛЕГЕНДУ
+                        position: 'bottom',      // СТАВИМО ЇЇ ЗНИЗУ ГРАФІКА
+                        labels: {
+                            boxWidth: 10,       // Зменшуємо ширину квадратика (було 12)
+                            boxHeight: 10,      // Додаємо фіксовану висоту квадратика
+                            padding: 6,         // Зменшуємо відступ між пунктами втричі (було 15)!
+                            font: { size: 10, weight: 'bold' } // Робимо шрифт на 1px меншим (було 11)
+                        }
                     },
                     tooltip: { callbacks: { title: (items) => `День: ${dateStr} о ${items[0].label}` } }
                 }
@@ -495,7 +536,6 @@ window.exportCompareToExcel = async function(workbook) {
     const originalText = btn.innerText;
     btn.innerText = "⏳ Завантаження бази...";
 
-    // 1. ОДИН ЗАПРОС НА ВСЕ ДВОРЫ И ДАТЫ СРАЗУ
     let bulkData;
     try {
         const url = `${RESULTS_SCRIPT_URL}?action=getBulkCompare&startDate=${startVal}&endDate=${endVal}`;
@@ -507,7 +547,6 @@ window.exportCompareToExcel = async function(workbook) {
         return false;
     }
 
-    // 2. ОПРЕДЕЛЯЕМ ПЕРЕЧЕНЬ ДВОРОВ ДЛЯ ВЫГРУЗКИ
     let yardsToExport = [];
     if (exportMode === 'current') {
         const role = sessionStorage.getItem('kamagonAuthRole');
@@ -515,7 +554,6 @@ window.exportCompareToExcel = async function(workbook) {
         const currentYard = role === 'Адмін' ? (select ? select.value : "") : sessionStorage.getItem('kamagonAuthYard');
         if (currentYard) yardsToExport.push(currentYard);
     } else {
-        // Вытягиваем уникальный список автодворов из первой колонки [0] полученных массивов
         const yardsSet = new Set();
         if (bulkData.planRows) bulkData.planRows.forEach(r => yardsSet.add(r[0]));
         if (bulkData.factRows) bulkData.factRows.forEach(r => yardsSet.add(r[0]));
@@ -529,7 +567,6 @@ window.exportCompareToExcel = async function(workbook) {
         return false;
     }
 
-    // Формируем сетку дат
     let datesList = [];
     let curr = new Date(startVal);
     let endD = new Date(endVal);
@@ -544,9 +581,7 @@ window.exportCompareToExcel = async function(workbook) {
     const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
     let totalSheetsCreated = 0;
 
-    // 3. ЦИКЛ ОБРАБОТКИ ДВОРОВ (ТЕПЕРЬ РАБОТАЕТ МГНОВЕННО В ОФЛАЙНЕ)
     for (const yard of yardsToExport) {
-        // Локальная фильтрация массивов вместо "fetch" запросов!
         const yardPlanRows = (bulkData.planRows || []).filter(row => row[0] === yard);
         const yardFactRows = (bulkData.factRows || []).filter(row => row[0] === yard);
         const yardRduRows = (bulkData.rduRows || []).filter(row => row[0] === yard);
@@ -555,7 +590,6 @@ window.exportCompareToExcel = async function(workbook) {
 
         totalSheetsCreated++;
 
-        // Расчет лимитов флота
         const availK = (typeof fleetDictionary !== 'undefined' && fleetDictionary[yard]) ? fleetDictionary[yard].kamag : 0;
         const availM = (typeof fleetDictionary !== 'undefined' && fleetDictionary[yard]) ? fleetDictionary[yard].man : 0;
         let maxK = availK;
@@ -584,8 +618,8 @@ window.exportCompareToExcel = async function(workbook) {
         }
 
         const vehicleRows = [];
-        for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}`);
-        for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}`);
+        for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}${i > availK ? ' (дод.)' : ''}`);
+        for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}${i > availM ? ' (дод.)' : ''}`);
 
         const planFleet = {}, rduFleet = {};
         const planOps = {}, autoFactOps = {};
@@ -615,18 +649,30 @@ window.exportCompareToExcel = async function(workbook) {
             return s;
         };
 
-        // Заполнение массивов План
         yardPlanRows.forEach(row => {
             const dStr = normalizeDay(row[1]);
             if (!datesList.includes(dStr)) return;
             const h = parseInt(row[2], 10);
             planOps[dStr][h] = parseInt(row[4], 10) || 0;
             const [kStr, mStr] = String(row[3]).split('|');
-            if (kStr) kStr.split(',').forEach((bit, idx) => { if (idx < maxK) planFleet[`Kamag ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0; });
-            if (mStr) mStr.split(',').forEach((bit, idx) => { if (idx < maxM) planFleet[`Маневровий ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0; });
+            if (kStr) {
+                kStr.split(',').forEach((bit, idx) => { 
+                    if (idx < maxK) {
+                        const vName = `Kamag ${idx+1}${idx+1 > availK ? ' (дод.)' : ''}`;
+                        if (planFleet[vName] && planFleet[vName][dStr]) planFleet[vName][dStr][h] = parseInt(bit, 10) || 0; 
+                    }
+                });
+            }
+            if (mStr) {
+                mStr.split(',').forEach((bit, idx) => { 
+                    if (idx < maxM) {
+                        const vName = `Маневровий ${idx+1}${idx+1 > availM ? ' (дод.)' : ''}`;
+                        if (planFleet[vName] && planFleet[vName][dStr]) planFleet[vName][dStr][h] = parseInt(bit, 10) || 0; 
+                    }
+                });
+            }
         });
 
-        // Заполнение массивов Факт операций
         yardFactRows.forEach(row => {
             const dStr = normalizeDay(row[1]);
             if (!datesList.includes(dStr)) return;
@@ -634,35 +680,48 @@ window.exportCompareToExcel = async function(workbook) {
             autoFactOps[dStr][h] = parseInt(row[4], 10) || 0;
         });
 
-        // Заполнение массивов РДУ графика
         yardRduRows.forEach(row => {
             const dStr = normalizeDay(row[1]);
             if (!datesList.includes(dStr)) return;
             const h = parseInt(row[2], 10);
             const [kStr, mStr] = String(row[3]).split('|');
-            if (kStr) kStr.split(',').forEach((bit, idx) => { if (idx < maxK) rduFleet[`Kamag ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0; });
-            if (mStr) mStr.split(',').forEach((bit, idx) => { if (idx < maxM) rduFleet[`Маневровий ${idx+1}`][dStr][h] = parseInt(bit, 10) || 0; });
+            if (kStr) {
+                kStr.split(',').forEach((bit, idx) => { 
+                    if (idx < maxK) {
+                        const vName = `Kamag ${idx+1}${idx+1 > availK ? ' (дод.)' : ''}`;
+                        if (rduFleet[vName] && rduFleet[vName][dStr]) rduFleet[vName][dStr][h] = parseInt(bit, 10) || 0; 
+                    }
+                });
+            }
+            if (mStr) {
+                mStr.split(',').forEach((bit, idx) => { 
+                    if (idx < maxM) {
+                        const vName = `Маневровий ${idx+1}${idx+1 > availM ? ' (дод.)' : ''}`;
+                        if (rduFleet[vName] && rduFleet[vName][dStr]) rduFleet[vName][dStr][h] = parseInt(bit, 10) || 0; 
+                    }
+                });
+            }
         });
 
-        // Расчет линий мощности
         datesList.forEach(dStr => {
             for (let h = 0; h < 24; h++) {
                 let activeK_plan = 0, activeM_plan = 0;
                 let activeK_rdu = 0, activeM_rdu = 0;
                 for (let i = 1; i <= maxK; i++) {
-                    if (planFleet[`Kamag ${i}`][dStr][h] === 1) activeK_plan++;
-                    if (rduFleet[`Kamag ${i}`][dStr][h] === 1) activeK_rdu++;
+                    const vName = `Kamag ${i}${i > availK ? ' (дод.)' : ''}`;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeK_plan++;
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeK_rdu++;
                 }
                 for (let i = 1; i <= maxM; i++) {
-                    if (planFleet[`Маневровий ${i}`][dStr][h] === 1) activeM_plan++;
-                    if (rduFleet[`Маневровий ${i}`][dStr][h] === 1) activeM_rdu++;
+                    const vName = `Маневровий ${i}${i > availM ? ' (дод.)' : ''}`;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeM_plan++;
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeM_rdu++;
                 }
                 planCap[dStr][h] = (activeK_plan * yardNorms.k) + (activeM_plan * yardNorms.m);
                 autoFactCap[dStr][h] = (activeK_rdu * yardNorms.k) + (activeM_rdu * yardNorms.m);
             }
         });
 
-        // Создание вкладки Excel для двора
         const sheetName = yard.substring(0, 31).replace(/[\\\?\*\[\]\/]/g, "");
         const sheet = workbook.addWorksheet(sheetName);
         
@@ -875,7 +934,7 @@ window.exportCompareToExcel = async function(workbook) {
                         if (val > 0) {
                             cell.value = val;
                             cell.fill = cfg.fill;
-                            cell.font = { bold: true }; // <-- Меняем на true
+                            cell.font = { bold: true };
                         }
                     }
                     daySum += val;
