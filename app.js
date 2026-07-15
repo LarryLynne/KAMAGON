@@ -211,6 +211,20 @@ const colIdx = {
 function parseExcelDate(val) {
     if (!val) return null;
     if (typeof val === 'number') return new Date(Math.round((val - 25569) * 86400 * 1000));
+    
+    // БРОНЕБІЙНА ОБРОБКА ДАТ З ТОЧКАМИ (напр. "27.05.2026" або "27.05.26")
+    if (typeof val === 'string' && val.includes('.')) {
+        const parts = val.trim().split('.');
+        if (parts.length === 3) {
+            let year = parseInt(parts[2], 10);
+            if (year < 100) year += 2000; // Якщо рік вказано як 26 -> перетворюємо на 2026
+            const month = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[0], 10);
+            const d = new Date(year, month, day);
+            if (!isNaN(d.getTime())) return d;
+        }
+    }
+
     const d = new Date(val);
     return isNaN(d.getTime()) ? null : d;
 }
@@ -950,9 +964,9 @@ function generateDetailedSchedules(targetYard, useDates) {
 
         generatedDatesList.forEach(targetDate => {
             if (useDates) {
-                const tDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
-                const sDate = item.dateStart ? new Date(item.dateStart.getFullYear(), item.dateStart.getMonth(), item.dateStart.getDate()).getTime() : 0;
-                const eDate = item.dateEnd ? new Date(item.dateEnd.getFullYear(), item.dateEnd.getMonth(), item.dateEnd.getDate()).getTime() : Infinity;
+                const tDate = new Date(targetDate).setHours(0, 0, 0, 0);
+                const sDate = item.dateStart ? new Date(item.dateStart).setHours(0, 0, 0, 0) : 0;
+                const eDate = item.dateEnd ? new Date(item.dateEnd).setHours(23, 59, 59, 999) : Infinity;
                 
                 if (tDate < sDate) return; 
                 if (item.dateEnd && tDate > eDate) return; 
@@ -1131,7 +1145,8 @@ function formatAbsoluteMinutes(mins) {
 
 function calculateRampTimes() {
     //const interval = parseInt(document.getElementById('rampInterval').value, 10) || 10;
-
+    const percentInput = document.getElementById('firstContainerPercent');
+    const firstPercent = percentInput ? (Math.max(10, Math.min(90, parseInt(percentInput.value, 10))) || 70) : 70;
     const groups = {};
     detailedSchedules.forEach(item => {
         if (item.timeDepartureA === "—") return;
@@ -1255,10 +1270,40 @@ function calculateRampTimes() {
                 }
             }
             
+            // --- РОЗУМНИЙ РОЗПОДІЛ ЧАСУ ДЛЯ 2+ КОНТЕЙНЕРІВ НА ОДНОМУ РЕЙСІ ---
+            const tripGroups = {};
             batch.forEach(item => {
-                item.timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                item.timeDepartureA = formatAbsoluteMinutes(item.absDep);
+                const tripKey = `${item.day}_${item.originalRoute}_${item.originalCode}`;
+                if (!tripGroups[tripKey]) tripGroups[tripKey] = [];
+                tripGroups[tripKey].push(item);
             });
+
+            for (const tripKey in tripGroups) {
+                const tripItems = tripGroups[tripKey];
+                const totalDuration = tripItems[0].absDep - finalPlacement; // Загальне вікно в хвилинах
+
+                // Якщо контейнерів 2 (або більше) І вікно більше 2 годин (120 хв)
+                if (tripItems.length >= 2 && totalDuration > 120) {
+                    let firstDuration = totalDuration * (firstPercent / 100);
+                    firstDuration = Math.round(firstDuration / 5) * 5; // Округлення до найближчих 5 хвилин
+
+                    // 1-й контейнер ставимо на початок вікна
+                    tripItems[0].timePlacementA = formatAbsoluteMinutes(finalPlacement);
+                    tripItems[0].timeDepartureA = formatAbsoluteMinutes(tripItems[0].absDep);
+
+                    // 2-й (та наступні) ставимо після того, як 1-й забрав свої 70% часу
+                    for (let idx = 1; idx < tripItems.length; idx++) {
+                        tripItems[idx].timePlacementA = formatAbsoluteMinutes(finalPlacement + firstDuration);
+                        tripItems[idx].timeDepartureA = formatAbsoluteMinutes(tripItems[idx].absDep);
+                    }
+                } else {
+                    // Якщо контейнер 1 або часу <= 2 годин — ставимо паралельно в один час
+                    tripItems.forEach(item => {
+                        item.timePlacementA = formatAbsoluteMinutes(finalPlacement);
+                        item.timeDepartureA = formatAbsoluteMinutes(item.absDep);
+                    });
+                }
+            }
 
             prevAbsDep = currentAbsDep;
         }
