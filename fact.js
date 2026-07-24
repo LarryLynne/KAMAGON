@@ -281,7 +281,8 @@ function processFactData(text) {
 
             // Логирование событий и накопление матрицы операций
             // Визначаємо, чи є рейс порожнім перегоном
-            const isEmptyTransfer = row.reason && row.reason.toLowerCase().includes("empty");
+            const isEmptyTransfer = (row.reason && row.reason.toLowerCase().includes("empty")) || 
+                        (!row.statement || row.statement.trim() === "" || row.statement === "—");
 
             // Логирование событий и накопление матрицы операций
             if (row.yardA !== "Невідомий автодвір" && !isEmptyTransfer) { // Пропускаємо події двору А для порожніх
