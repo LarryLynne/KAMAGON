@@ -280,7 +280,11 @@ function processFactData(text) {
             actualFlightsData.push(row);
 
             // Логирование событий и накопление матрицы операций
-            if (row.yardA !== "Невідомий автодвір") {
+            // Визначаємо, чи є рейс порожнім перегоном
+            const isEmptyTransfer = row.reason && row.reason.toLowerCase().includes("empty");
+
+            // Логирование событий и накопление матрицы операций
+            if (row.yardA !== "Невідомий автодвір" && !isEmptyTransfer) { // Пропускаємо події двору А для порожніх
                 if (dPlacementA) {
                     factCalculatedEvents.push({ yard: row.yardA, node: row.nodeA, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "1. Постановка", dateTime: dPlacementA });
                     recordMatrixOp(row.yardA, dPlacementA, "op1");
@@ -292,11 +296,11 @@ function processFactData(text) {
             }
 
             if (row.yardB !== "Невідомий автодвір") {
-                if (dPlacementB) {
+                if (dPlacementB && !isEmptyTransfer) { // Пропускаємо 3. Постановка для порожніх
                     factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "3. Постановка", dateTime: dPlacementB });
                     recordMatrixOp(row.yardB, dPlacementB, "op3");
                 }
-                if (dRampLeaveB) {
+                if (dRampLeaveB) { // 4. Забір записується завжди (і для порожніх, і для звичайних)
                     factCalculatedEvents.push({ yard: row.yardB, node: row.nodeB, route: row.route, flight: row.flight, reason: row.reason, vehicle: row.vehicle, container: row.container, deliveryType: row.deliveryType, eventType: "4. Забір", dateTime: dRampLeaveB });
                     recordMatrixOp(row.yardB, dRampLeaveB, "op4");
                 }

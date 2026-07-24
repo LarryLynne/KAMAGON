@@ -1289,7 +1289,8 @@ function calculateRampTimes() {
 
                     // 1-й контейнер ставимо на початок вікна
                     tripItems[0].timePlacementA = formatAbsoluteMinutes(finalPlacement);
-                    tripItems[0].timeDepartureA = formatAbsoluteMinutes(tripItems[0].absDep);
+                    // ВИПРАВЛЕНО: Час забору 1-го контейнера — це кінець його виділеного часу (якраз перед постановкою 2-го)
+                    tripItems[0].timeDepartureA = formatAbsoluteMinutes(finalPlacement + firstDuration);
 
                     // 2-й (та наступні) ставимо після того, як 1-й забрав свої 70% часу
                     for (let idx = 1; idx < tripItems.length; idx++) {
@@ -1429,8 +1430,10 @@ function generateYardEvents() {
                 addEvent(item.yardA, item.nodeA, 1, "1. Постановка", getAbsoluteMinutes(parts[0], parts[1]), item.originalCode, item.originalRoute, item.deliveryType);
             }
             if (item.timeDepartureA && item.timeDepartureA !== "—") {
-                // ДОДАНО item.deliveryType в кінці
-                addEvent(item.yardA, item.nodeA, 2, "2. Забір", item.absDep - bufferA, item.originalCode, item.originalRoute, item.deliveryType);
+                // ВИПРАВЛЕНО: Беремо фактичний розрахований час забору контейнера замість загального часу відправлення всього рейсу (item.absDep)
+                const parts = item.timeDepartureA.split(' ');
+                const actualDepMins = getAbsoluteMinutes(parts[0], parts[1]);
+                addEvent(item.yardA, item.nodeA, 2, "2. Забір", actualDepMins - bufferA, item.originalCode, item.originalRoute, item.deliveryType);
             }
         }
         
