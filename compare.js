@@ -112,8 +112,13 @@ async function loadUnifiedCompareData() {
         }
 
         const vehicleRows = [];
-        for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}${i > availK ? ' (дод.)' : ''}`);
-        for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}${i > availM ? ' (дод.)' : ''}`);
+        // 1. Спочатку весь фізичний (наявний) транспорт
+        for (let i = 1; i <= availK; i++) vehicleRows.push(`Kamag ${i}`);
+        for (let i = 1; i <= availM; i++) vehicleRows.push(`Маневровий ${i}`);
+        
+        // 2. Потім весь додатковий (віртуальний) транспорт знизу
+        for (let i = availK + 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i} (дод.)`);
+        for (let i = availM + 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i} (дод.)`);
 
         const planFleet = {}, rduFleet = {};
         const planOps = {}, autoFactOps = {};
@@ -244,9 +249,19 @@ async function loadUnifiedCompareData() {
             }
         });
 
-        lastCompareData = { yard, datesList, vehicleRows, planFleet, rduFleet, planOps, autoFactOps, planCap, autoFactCap, maxK, maxM };
+        const filteredVehicleRows = vehicleRows.filter(v => {
+            let isUsed = false;
+            datesList.forEach(dStr => {
+                for (let h = 0; h < 24; h++) {
+                    if (planFleet[v][dStr][h] === 1 || rduFleet[v][dStr][h] === 1) isUsed = true;
+                }
+            });
+            return isUsed;
+        });
 
-        buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, planOps, autoFactOps);
+    lastCompareData = { yard, datesList, vehicleRows: filteredVehicleRows, planFleet, rduFleet, planOps, autoFactOps, planCap, autoFactCap, maxK, maxM };
+
+    buildCompareTableHTML(filteredVehicleRows, planFleet, rduFleet, datesList, planOps, autoFactOps);
         buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCap);
 
         setTimeout(() => {
@@ -618,8 +633,13 @@ window.exportCompareToExcel = async function(workbook) {
         }
 
         const vehicleRows = [];
-        for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}${i > availK ? ' (дод.)' : ''}`);
-        for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}${i > availM ? ' (дод.)' : ''}`);
+        // 1. Спочатку весь фізичний (наявний) транспорт
+        for (let i = 1; i <= availK; i++) vehicleRows.push(`Kamag ${i}`);
+        for (let i = 1; i <= availM; i++) vehicleRows.push(`Маневровий ${i}`);
+        
+        // 2. Потім весь додатковий (віртуальний) транспорт знизу
+        for (let i = availK + 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i} (дод.)`);
+        for (let i = availM + 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i} (дод.)`);
 
         const planFleet = {}, rduFleet = {};
         const planOps = {}, autoFactOps = {};
@@ -722,6 +742,16 @@ window.exportCompareToExcel = async function(workbook) {
             }
         });
 
+        const filteredVehicleRows = vehicleRows.filter(v => {
+            let isUsed = false;
+            datesList.forEach(dStr => {
+                for (let h = 0; h < 24; h++) {
+                    if (planFleet[v][dStr][h] === 1 || rduFleet[v][dStr][h] === 1) isUsed = true;
+                }
+            });
+            return isUsed; // Залишаємо тільки ті ТЗ, де є хоча б одна одиничка
+        });
+
         const sheetName = yard.substring(0, 31).replace(/[\\\?\*\[\]\/]/g, "");
         const sheet = workbook.addWorksheet(sheetName);
         
@@ -793,7 +823,7 @@ window.exportCompareToExcel = async function(workbook) {
             const cellR = rowHours.getCell(currentC++); cellR.value = "Σ Р"; cellR.font = { bold: true, size: 9 }; cellR.fill = fillHeader; cellR.alignment = alignCenter;
         });
 
-        vehicleRows.forEach(v => {
+        filteredVehicleRows.forEach(v => {
             const row = sheet.addRow();
             row.getCell(1).value = v;
             row.getCell(1).font = { bold: true };

@@ -129,8 +129,13 @@ function renderRduGrid() {
     }
 
     const vehicleRows = [];
-    for (let i = 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i}${i > availK ? ' (дод.)' : ''}`);
-    for (let i = 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i}${i > availM ? ' (дод.)' : ''}`);
+    // 1. Спочатку весь фізичний (наявний) транспорт
+    for (let i = 1; i <= availK; i++) vehicleRows.push(`Kamag ${i}`);
+    for (let i = 1; i <= availM; i++) vehicleRows.push(`Маневровий ${i}`);
+    
+    // 2. Потім весь додатковий (віртуальний) транспорт знизу
+    for (let i = availK + 1; i <= maxK; i++) vehicleRows.push(`Kamag ${i} (дод.)`);
+    for (let i = availM + 1; i <= maxM; i++) vehicleRows.push(`Маневровий ${i} (дод.)`);
 
     vehicleRows.forEach(v => {
         if (!rduStateMatrix[dateStr][v]) rduStateMatrix[dateStr][v] = Array(24).fill(0);
