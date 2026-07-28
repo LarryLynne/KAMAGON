@@ -224,11 +224,11 @@ async function loadUnifiedCompareData() {
                 let activeK = 0, activeM = 0;
                 for (let i = 1; i <= maxK; i++) {
                     const vName = `Kamag ${i}${i > availK ? ' (дод.)' : ''}`;
-                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeK++;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] > 0) activeK++;
                 }
                 for (let i = 1; i <= maxM; i++) {
                     const vName = `Маневровий ${i}${i > availM ? ' (дод.)' : ''}`;
-                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeM++;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] > 0) activeM++;
                 }
                 planCap[dStr][h] = (activeK * yardNorms.k) + (activeM * yardNorms.m);
             }
@@ -239,11 +239,11 @@ async function loadUnifiedCompareData() {
                 let activeK = 0, activeM = 0;
                 for (let i = 1; i <= maxK; i++) {
                     const vName = `Kamag ${i}${i > availK ? ' (дод.)' : ''}`;
-                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeK++;
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] > 0) activeK++;
                 }
                 for (let i = 1; i <= maxM; i++) {
                     const vName = `Маневровий ${i}${i > availM ? ' (дод.)' : ''}`;
-                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeM++;
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] > 0) activeM++;
                 }
                 autoFactCap[dStr][h] = (activeK * yardNorms.k) + (activeM * yardNorms.m);
             }
@@ -253,20 +253,20 @@ async function loadUnifiedCompareData() {
             let isUsed = false;
             datesList.forEach(dStr => {
                 for (let h = 0; h < 24; h++) {
-                    if (planFleet[v][dStr][h] === 1 || rduFleet[v][dStr][h] === 1) isUsed = true;
+                    if (planFleet[v][dStr][h] > 0 || rduFleet[v][dStr][h] > 0) isUsed = true; // Виправлено на > 0
                 }
             });
             return isUsed;
         });
 
-    lastCompareData = { yard, datesList, vehicleRows: filteredVehicleRows, planFleet, rduFleet, planOps, autoFactOps, planCap, autoFactCap, maxK, maxM };
+        lastCompareData = { yard, datesList, vehicleRows: filteredVehicleRows, planFleet, rduFleet, planOps, autoFactOps, planCap, autoFactCap, maxK, maxM };
 
-    buildCompareTableHTML(filteredVehicleRows, planFleet, rduFleet, datesList, planOps, autoFactOps);
-        buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCap);
-
+        buildCompareTableHTML(filteredVehicleRows, planFleet, rduFleet, datesList, planOps, autoFactOps);
+        
+        // Даємо браузеру більше часу (250 мс) на відмальовування великої таблиці
         setTimeout(() => {
             buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCap);
-        }, 50);
+        }, 250);
 
     } catch (e) {
         console.error(e);
@@ -324,19 +324,22 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
                 const pBit = planFleet[v][dStr][h];
                 const rBit = rduFleet[v][dStr][h];
                 
+                const pActive = pBit > 0; // ДОДАНО
+                const rActive = rBit > 0; // ДОДАНО
+                
                 let bgStyle = "";
                 let displayVal = "";
                 let borderStyle = h === 0 ? "border-left: 2px solid #6c757d;" : "";
 
-                if (pBit === 1 && rBit === 1) {
+                if (pActive && rActive) { // ЗАМІНЕНО
                     bgStyle = "background-color: #ea580c; color: #fff; font-weight: bold;"; 
                     displayVal = "1";
                     dayPlanHours++; dayRduHours++;
-                } else if (pBit === 0 && rBit === 1) {
+                } else if (!pActive && rActive) { // ЗАМІНЕНО
                     bgStyle = "background-color: #be123c; color: #fff; font-weight: bold;"; 
                     displayVal = "1";
                     dayRduHours++;
-                } else if (pBit === 1 && rBit === 0) {
+                } else if (pActive && !rActive) { // ЗАМІНЕНО
                     bgStyle = "background-color: #ffedd5; color: #9a3412; font-weight: bold; border: 1px solid #fed7aa;"; 
                     displayVal = "0";
                     dayPlanHours++;
@@ -475,7 +478,14 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
         if (!ctx) return;
 
         const parentDiv = ctx.parentElement;
-        ctx.width = parentDiv.clientWidth;
+        
+        // ЗАХИСТ: Якщо таблиця ще не розтягнулася, задаємо базову ширину, щоб графік не зник
+        let chartWidth = parentDiv.clientWidth;
+        if (chartWidth < 100) {
+            chartWidth = 600; 
+        }
+        
+        ctx.width = chartWidth;
         ctx.height = 250; // Збільшили висоту, щоб влізла легенда
 
         const labels = [];
@@ -568,6 +578,8 @@ window.exportCompareToExcel = async function(workbook) {
         const select = document.getElementById('compareYardSelect');
         const currentYard = role === 'Адмін' ? (select ? select.value : "") : sessionStorage.getItem('kamagonAuthYard');
         if (currentYard) yardsToExport.push(currentYard);
+    } else if (exportMode === 'custom') {
+        yardsToExport = window.customExportYards || [];
     } else {
         const yardsSet = new Set();
         if (bulkData.planRows) bulkData.planRows.forEach(r => yardsSet.add(r[0]));
@@ -729,13 +741,13 @@ window.exportCompareToExcel = async function(workbook) {
                 let activeK_rdu = 0, activeM_rdu = 0;
                 for (let i = 1; i <= maxK; i++) {
                     const vName = `Kamag ${i}${i > availK ? ' (дод.)' : ''}`;
-                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeK_plan++;
-                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeK_rdu++;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] > 0) activeK_plan++; // ЗАМІНЕНО
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] > 0) activeK_rdu++; // ЗАМІНЕНО
                 }
                 for (let i = 1; i <= maxM; i++) {
                     const vName = `Маневровий ${i}${i > availM ? ' (дод.)' : ''}`;
-                    if (planFleet[vName] && planFleet[vName][dStr][h] === 1) activeM_plan++;
-                    if (rduFleet[vName] && rduFleet[vName][dStr][h] === 1) activeM_rdu++;
+                    if (planFleet[vName] && planFleet[vName][dStr][h] > 0) activeM_plan++; // ЗАМІНЕНО
+                    if (rduFleet[vName] && rduFleet[vName][dStr][h] > 0) activeM_rdu++; // ЗАМІНЕНО
                 }
                 planCap[dStr][h] = (activeK_plan * yardNorms.k) + (activeM_plan * yardNorms.m);
                 autoFactCap[dStr][h] = (activeK_rdu * yardNorms.k) + (activeM_rdu * yardNorms.m);
@@ -746,10 +758,10 @@ window.exportCompareToExcel = async function(workbook) {
             let isUsed = false;
             datesList.forEach(dStr => {
                 for (let h = 0; h < 24; h++) {
-                    if (planFleet[v][dStr][h] === 1 || rduFleet[v][dStr][h] === 1) isUsed = true;
+                    if (planFleet[v][dStr][h] > 0 || rduFleet[v][dStr][h] > 0) isUsed = true; // ЗАМІНЕНО
                 }
             });
-            return isUsed; // Залишаємо тільки ті ТЗ, де є хоча б одна одиничка
+            return isUsed;
         });
 
         const sheetName = yard.substring(0, 31).replace(/[\\\?\*\[\]\/]/g, "");
@@ -839,17 +851,21 @@ window.exportCompareToExcel = async function(workbook) {
                 for (let h = 0; h < 24; h++) {
                     const pBit = planFleet[v][dStr][h];
                     const rBit = rduFleet[v][dStr][h];
+                    
+                    const pActive = pBit > 0; // ДОДАНО
+                    const rActive = rBit > 0; // ДОДАНО
+
                     const cell = row.getCell(cCol);
                     cell.alignment = alignCenter;
                     cell.border = getBorders(h === 0, false);
 
-                    if (pBit === 1 && rBit === 1) {
+                    if (pActive && rActive) { // ЗАМІНЕНО
                         cell.value = 1; cell.fill = fillMatch; cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
                         dayPlanHours++; dayRduHours++;
-                    } else if (pBit === 0 && rBit === 1) {
+                    } else if (!pActive && rActive) { // ЗАМІНЕНО
                         cell.value = 1; cell.fill = fillExcess; cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
                         dayRduHours++;
-                    } else if (pBit === 1 && rBit === 0) {
+                    } else if (pActive && !rActive) { // ЗАМІНЕНО
                         cell.value = 0; cell.fill = fillIdle; cell.font = { color: { argb: 'FF9A3412' }, bold: true };
                         dayPlanHours++;
                     }

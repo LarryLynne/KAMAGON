@@ -138,6 +138,8 @@ function updateAuthVisibility() {
                 if (fileInputLabel) fileInputLabel.style.display = 'none';
                 if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
                 if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'none';
+                if (document.getElementById('saveCustomGoogleBtn')) document.getElementById('saveCustomGoogleBtn').style.display = 'none';
+                if (document.getElementById('saveCustomFactGoogleBtn')) document.getElementById('saveCustomFactGoogleBtn').style.display = 'none';
 
                 const activeTab = document.querySelector('.tabs .tab-btn.active');
                 if (activeTab && (activeTab === tabRaw || activeTab === tabDetailed || activeTab === tabEvents || activeTab === tabFact)) {
@@ -828,8 +830,8 @@ document.getElementById('generateDetailedBtn').addEventListener('click', () => {
     if (allSchedules.length === 0) return alert("Спочатку завантажте вихідні графіки!");
 
     const yardSelect = document.getElementById('genYardSelect');
-    yardSelect.innerHTML = '<option value="ALL">Всі автодвори (повний розрахунок)</option>';
-    
+    yardSelect.innerHTML = '<option value="ALL" selected>Всі автодвори (повний розрахунок)</option>';
+
     const uniqueYards = Object.keys(yardDictionary).map(k => yardDictionary[k].yard).filter((v, i, a) => v && a.indexOf(v) === i).sort();
     uniqueYards.forEach(y => {
         const opt = document.createElement('option');
@@ -849,7 +851,12 @@ document.getElementById('generateDetailedBtn').addEventListener('click', () => {
 document.getElementById('closeGenerateModal').addEventListener('click', () => { generateModal.style.display = 'none'; });
 
 document.getElementById('confirmGenerateBtn').addEventListener('click', () => {
-    const yardOpt = document.getElementById('genYardSelect').value;
+    const select = document.getElementById('genYardSelect');
+    // Збираємо масив усіх обраних автодворів
+    const selectedYards = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    if (selectedYards.length === 0) return alert("Оберіть хоча б один автодвір!");
+
     const dStart = new Date(document.getElementById('genDateStart').value);
     const dEnd = new Date(document.getElementById('genDateEnd').value);
     const useDates = document.getElementById('genUseScheduleDates').checked;
@@ -870,7 +877,7 @@ document.getElementById('confirmGenerateBtn').addEventListener('click', () => {
     btn.innerText = "⏳ Генерація..."; btn.disabled = true;
 
     setTimeout(() => {
-        generateDetailedSchedules(yardOpt, useDates);
+        generateDetailedSchedules(selectedYards, useDates);
         calculateRampTimes();
         calculateUnloadingTimes();
         
@@ -893,7 +900,7 @@ function formatDateToDDMMYYYY(dateObj) {
     return `${String(dateObj.getDate()).padStart(2, '0')}.${String(dateObj.getMonth() + 1).padStart(2, '0')}.${dateObj.getFullYear()}`;
 }
 
-function generateDetailedSchedules(targetYard, useDates) {
+function generateDetailedSchedules(targetYards, useDates) {
     detailedSchedules = [];
     
     allSchedules.forEach(item => {
@@ -1003,8 +1010,11 @@ function generateDetailedSchedules(targetYard, useDates) {
                 const yardDataA = yardDictionary[nodeA.name];
                 const yardDataB = yardDictionary[nodeB.name];
                 
-                if (targetYard !== "ALL" && (!yardDataA || yardDataA.yard !== targetYard) && (!yardDataB || yardDataB.yard !== targetYard)) return;
-
+                const isAll = targetYards.includes("ALL");
+                const yA = yardDataA ? yardDataA.yard : null;
+                const yB = yardDataB ? yardDataB.yard : null;
+                
+                if (!isAll && !targetYards.includes(yA) && !targetYards.includes(yB)) return;
                 // --- 3. ФОРМУЄМО ТОЧНИЙ ЧАС З ПРАВИЛЬНИМИ ДАТАМИ ---
                 let dateDepA = applyOffset(targetDate, nodeA.depDayOffset);
                 let finalDepartureA = dateDepA !== "—" ? `${dateDepA} ${nodeA.timeDep}` : "—";
@@ -1886,7 +1896,19 @@ function renderKamagTable() {
 
 document.getElementById('kamagYardSelect').addEventListener('change', renderKamagTable);
 
-document.getElementById('kamagTableWrapper').addEventListener('click', function(e) {
+// === НОВИЙ ФУНКЦІОНАЛ ПРОТЯГУВАННЯ (ПЕНЗЛИК) ДЛЯ ВКЛАДКИ РОЗРАХУНОК ===
+let isKamagMouseDown = false;
+let kamagPaintMode = 0;
+let lastKDay = null;
+let lastKType = null;
+let lastKIdx = null;
+let lastKHour = null;
+
+const kamagWrapper = document.getElementById('kamagTableWrapper');
+
+// 1. Початок малювання або очищення рядка
+kamagWrapper.addEventListener('mousedown', function(e) {
+    // Логіка очищення всього рядка (клік по заголовку ТЗ)
     if (e.target.classList.contains('fleet-row-header')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
         const header = e.target;
@@ -1908,8 +1930,12 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
         return;
     }
 
+    // Початок протягування клітинок
     if (e.target.classList.contains('kamag-editable')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
+        e.preventDefault(); // Щоб не виділявся текст при протягуванні
+        isKamagMouseDown = true;
+
         const cell = e.target;
         const yard = cell.getAttribute('data-yard');
         const day = cell.getAttribute('data-day');
@@ -1918,23 +1944,97 @@ document.getElementById('kamagTableWrapper').addEventListener('click', function(
         const idx = parseInt(cell.getAttribute('data-index'));
 
         const currentState = fleetActiveState[yard][day][hour][type][idx];
-        let newState = 0;
-
+        
+        // Визначаємо режим: малювати (1 або 2) чи стирати (0)
         if (currentState > 0) {
-            newState = 0; 
+            kamagPaintMode = 0; 
         } else {
             const wasSystemActive = systemFleetState[yard] && 
                                     systemFleetState[yard][day] && 
                                     systemFleetState[yard][day][hour] && 
                                     systemFleetState[yard][day][hour][type] && 
                                     systemFleetState[yard][day][hour][type][idx] === 1;
-            newState = wasSystemActive ? 1 : 2; 
+            kamagPaintMode = wasSystemActive ? 1 : 2; 
         }
         
-        fleetActiveState[yard][day][hour][type][idx] = newState;
-        renderKamagTable();
+        fleetActiveState[yard][day][hour][type][idx] = kamagPaintMode;
+        updateKamagCellVisual(cell, kamagPaintMode, type, idx, yard);
+
+        lastKDay = day;
+        lastKType = type;
+        lastKIdx = idx;
+        lastKHour = hour;
     }
 });
+
+// 2. Процес протягування (ведення мишкою)
+kamagWrapper.addEventListener('mouseover', function(e) {
+    if (!isKamagMouseDown) return;
+    
+    if (e.target.classList.contains('kamag-editable')) {
+        const cell = e.target;
+        const yard = cell.getAttribute('data-yard');
+        const day = cell.getAttribute('data-day');
+        const hour = parseInt(cell.getAttribute('data-hour'));
+        const type = cell.getAttribute('data-type'); 
+        const idx = parseInt(cell.getAttribute('data-index'));
+
+        // Якщо ведемо по тому ж самому рядку машини
+        if (day === lastKDay && type === lastKType && idx === lastKIdx) {
+            const startH = Math.min(lastKHour, hour);
+            const endH = Math.max(lastKHour, hour);
+            
+            // Заповнюємо всі проміжні клітинки (якщо мишка рухається швидко)
+            for (let h = startH; h <= endH; h++) {
+                fleetActiveState[yard][day][h][type][idx] = kamagPaintMode;
+                const targetCell = document.querySelector(`.kamag-editable[data-yard="${yard}"][data-day="${day}"][data-hour="${h}"][data-type="${type}"][data-index="${idx}"]`);
+                if (targetCell) {
+                    updateKamagCellVisual(targetCell, kamagPaintMode, type, idx, yard);
+                }
+            }
+            lastKHour = hour;
+        } else {
+            // Якщо перескочили на інший рядок - просто оновлюємо поточну клітинку
+            fleetActiveState[yard][day][hour][type][idx] = kamagPaintMode;
+            updateKamagCellVisual(cell, kamagPaintMode, type, idx, yard);
+            lastKDay = day;
+            lastKType = type;
+            lastKIdx = idx;
+            lastKHour = hour;
+        }
+    }
+});
+
+// 3. Відпускання мишки - фіналізуємо та перераховуємо графіки
+document.addEventListener('mouseup', function() {
+    if (isKamagMouseDown) {
+        isKamagMouseDown = false;
+        renderKamagTable(); // Тільки зараз оновлюємо тотали і діаграми
+    }
+});
+
+// Допоміжна функція для швидкої зміни кольору клітинки без повного перерендеру таблиці
+function updateKamagCellVisual(cell, mode, type, idx, yard) {
+    cell.innerText = mode > 0 ? 1 : '';
+    cell.className = 'kamag-cell kamag-editable'; // Скидаємо класи
+    
+    if (mode > 0) {
+        const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
+        const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
+        const isKamag = type === 'kamag';
+        const isManual = mode === 2;
+
+        if (isManual) {
+            if (isKamag && idx >= availK) cell.classList.add('kamag-manual-virtual');
+            else if (!isKamag && idx >= availM) cell.classList.add('kamag-manual-virtual');
+            else cell.classList.add('kamag-manual-physical');
+        } else {
+            if (isKamag && idx >= availK) cell.classList.add('kamag-active-virtual');
+            else if (!isKamag && idx >= availM) cell.classList.add('kamag-active-virtual');
+            else cell.classList.add('kamag-active');
+        }
+    }
+}
 
 function assignKamagsToEvents() {
     yardEvents = yardEvents.filter(ev => ev.event !== "Чергування");
@@ -2104,7 +2204,11 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
             if (exportMode === 'current') {
                 const currentYard = document.getElementById('kamagYardSelect').value;
                 if (currentYard) yardsToExport.push(currentYard);
-            } else yardsToExport = Object.keys(totalOpsData).sort();
+            } else if (exportMode === 'custom') {
+                yardsToExport = window.customExportYards || [];
+            } else {
+                yardsToExport = Object.keys(totalOpsData).sort();
+            }
 
             if (yardsToExport.length === 0) {
                 alert("Немає розрахованих даних для експорту!");
@@ -2378,6 +2482,248 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+});
+
+window.customExportYards = []; // Глобальний масив для збереження вибору
+
+document.getElementById('exportModeSelect').addEventListener('change', (e) => {
+    if (e.target.value === 'custom') {
+        const select = document.getElementById('exportCustomYardsSelect');
+        select.innerHTML = '';
+        
+        // Збираємо всі унікальні двори з довідника
+        const uniqueYards = Object.keys(yardDictionary).map(k => yardDictionary[k].yard).filter((v, i, a) => v && a.indexOf(v) === i).sort();
+        
+        if (uniqueYards.length === 0) {
+            alert("Довідник дворів порожній або ще не завантажений!");
+            e.target.value = 'all';
+            return;
+        }
+
+        uniqueYards.forEach(y => {
+            const opt = document.createElement('option');
+            opt.value = opt.textContent = y;
+            select.appendChild(opt);
+        });
+
+        document.getElementById('exportCustomModal').style.display = 'block';
+    }
+});
+
+document.getElementById('closeExportCustomModal').addEventListener('click', () => {
+    document.getElementById('exportCustomModal').style.display = 'none';
+    document.getElementById('exportModeSelect').value = 'all'; // Скидаємо вибір, якщо скасували
+});
+
+document.getElementById('confirmExportCustomBtn').addEventListener('click', () => {
+    const select = document.getElementById('exportCustomYardsSelect');
+    window.customExportYards = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    if (window.customExportYards.length === 0) {
+        alert('Оберіть хоча б один автодвір!');
+        return;
+    }
+    document.getElementById('exportCustomModal').style.display = 'none';
+});
+
+// === ЛОГІКА ЗБЕРЕЖЕННЯ ОБРАНИХ АВТОДВОРІВ ===
+let currentSaveContext = null; // 'plan' або 'fact'
+
+// Відкриття модалки для Плану
+document.getElementById('saveCustomGoogleBtn').addEventListener('click', () => {
+    const yards = Object.keys(totalOpsData).sort();
+    if (yards.length === 0) return alert("Немає розрахованих даних для збереження!");
+    openSaveCustomModal(yards, 'plan');
+});
+
+function openSaveCustomModal(yards, context) {
+    currentSaveContext = context;
+    const select = document.getElementById('saveCustomYardsSelect');
+    select.innerHTML = '';
+    yards.forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = y;
+        select.appendChild(opt);
+    });
+    document.getElementById('saveCustomModal').style.display = 'block';
+}
+
+document.getElementById('closeSaveCustomModal').addEventListener('click', () => {
+    document.getElementById('saveCustomModal').style.display = 'none';
+});
+
+// Клік по кнопці підтвердження в модалці
+document.getElementById('confirmSaveCustomBtn').addEventListener('click', async () => {
+    const select = document.getElementById('saveCustomYardsSelect');
+    const selectedYards = Array.from(select.selectedOptions).map(opt => opt.value);
+    
+    if (selectedYards.length === 0) {
+        alert('Оберіть хоча б один автодвір!');
+        return;
+    }
+    document.getElementById('saveCustomModal').style.display = 'none';
+
+    if (currentSaveContext === 'plan') {
+        await executeSaveMultiple(selectedYards);
+    } else if (currentSaveContext === 'fact') {
+        if (typeof window.executeFactSaveMultiple === 'function') {
+            await window.executeFactSaveMultiple(selectedYards);
+        }
+    }
+});
+
+// Функція масового збереження Плану для обраних дворів
+async function executeSaveMultiple(yards) {
+    const btn = document.getElementById('saveCustomGoogleBtn'); 
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ Збереження..."; btn.disabled = true;
+
+    const aggregatedRows = [], allDays = new Set();
+    yards.forEach(yard => {
+        const days = Object.keys(totalOpsData[yard] || {});
+        days.forEach(day => {
+            allDays.add(day);
+            for (let h = 0; h < 24; h++) {
+                const opsCount = (totalOpsData[yard] && totalOpsData[yard][day]) ? totalOpsData[yard][day][h] : 0;
+                let stateString = "0|0", hasActive = false;
+                if (fleetActiveState[yard] && fleetActiveState[yard][day] && fleetActiveState[yard][day][h]) {
+                    const kArr = fleetActiveState[yard][day][h].kamag; const mArr = fleetActiveState[yard][day][h].man;
+                    stateString = `${kArr.join(',')}|${mArr.join(',')}`; hasActive = kArr.some(v => v > 0) || mArr.some(v => v > 0);
+                }
+                if (opsCount > 0 || hasActive) aggregatedRows.push([yard, day, h, stateString, opsCount]);
+            }
+        });
+    });
+
+    if (aggregatedRows.length === 0) {
+        alert("Немає даних для збереження!");
+        btn.innerText = originalText; btn.disabled = false;
+        return;
+    }
+
+    try {
+        await fetch(RESULTS_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'saveAllAggregated', yards: yards, rows: aggregatedRows, dates: Array.from(allDays) }) });
+        btn.innerText = "✅ Збережено!";
+    } catch (e) { btn.innerText = "❌ Помилка"; }
+    setTimeout(() => { btn.innerText = originalText; btn.disabled = false; }, 3000);
+}
+
+// === РОЗУМНИЙ ПОШУК ДЛЯ АВТОДВОРІВ (CUSTOM SEARCHABLE SELECT) ===
+window.makeSelectSearchable = function(selectId) {
+    const originalSelect = document.getElementById(selectId);
+    if (!originalSelect || originalSelect.dataset.searchable) return;
+
+    originalSelect.dataset.searchable = "true";
+    originalSelect.style.display = 'none'; // Ховаємо оригінальний список
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'custom-searchable-select';
+    
+    // Переносимо висоту/ширину, якщо вони були вказані (напр. для РДУ)
+    if (originalSelect.style.height) wrapper.style.height = originalSelect.style.height;
+    if (originalSelect.style.minWidth) wrapper.style.minWidth = originalSelect.style.minWidth;
+
+    originalSelect.parentNode.insertBefore(wrapper, originalSelect);
+    wrapper.appendChild(originalSelect);
+
+    const input = document.createElement('input');
+    input.type = 'search'; // Змінюємо тип на пошук
+    input.className = 'custom-searchable-input';
+    input.placeholder = '-- Оберіть автодвір --';
+    
+    // Бронебійний захист від спроб автозаповнення
+    input.name = 'search_box_' + Math.random().toString(36).substring(7); // Унікальне ім'я
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('autocapitalize', 'none');
+    input.setAttribute('spellcheck', 'false');
+    input.setAttribute('data-lpignore', 'true');
+    
+    if (originalSelect.style.height) input.style.height = originalSelect.style.height;
+
+    wrapper.appendChild(input);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'custom-searchable-dropdown';
+    wrapper.appendChild(dropdown);
+
+    // Функція генерації списку на основі введеного тексту
+    const renderOptions = (filter = '') => {
+        dropdown.innerHTML = '';
+        let hasVisible = false;
+        Array.from(originalSelect.options).forEach(opt => {
+            if (opt.disabled || opt.value === "") return;
+            if (opt.text.toLowerCase().includes(filter.toLowerCase())) {
+                hasVisible = true;
+                const div = document.createElement('div');
+                div.className = 'custom-searchable-option';
+                div.textContent = opt.text;
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // Запобігаємо зникненню фокусу інпуту до кліку
+                    originalSelect.value = opt.value;
+                    input.value = opt.text;
+                    dropdown.classList.remove('show');
+                    originalSelect.dispatchEvent(new Event('change')); // Запускаємо перерахунок графіків
+                });
+                dropdown.appendChild(div);
+            }
+        });
+        if (!hasVisible) {
+            const div = document.createElement('div');
+            div.className = 'custom-searchable-option no-results';
+            div.textContent = 'Нічого не знайдено';
+            dropdown.appendChild(div);
+        }
+    };
+
+    // Обробники подій для вводу тексту
+    input.addEventListener('focus', () => {
+        input.value = ''; // Очищаємо для зручного нового пошуку
+        renderOptions('');
+        dropdown.classList.add('show');
+    });
+
+    input.addEventListener('input', (e) => {
+        renderOptions(e.target.value);
+    });
+
+    input.addEventListener('blur', () => {
+        setTimeout(() => {
+            dropdown.classList.remove('show');
+            // Повертаємо назву активного двору, якщо користувач нічого не обрав
+            const selectedOpt = originalSelect.options[originalSelect.selectedIndex];
+            input.value = selectedOpt && !selectedOpt.disabled ? selectedOpt.text : '';
+        }, 150);
+    });
+
+    originalSelect.addEventListener('change', () => {
+        const selectedOpt = originalSelect.options[originalSelect.selectedIndex];
+        input.value = selectedOpt && !selectedOpt.disabled ? selectedOpt.text : '';
+    });
+
+    // Спостерігач за завантаженням дворів із бази або блокуванням (для РДУ)
+    const observer = new MutationObserver(() => {
+        const selectedOpt = originalSelect.options[originalSelect.selectedIndex];
+        input.value = selectedOpt && !selectedOpt.disabled ? selectedOpt.text : '';
+        
+        input.disabled = originalSelect.disabled;
+        if (input.disabled) {
+            wrapper.style.opacity = '0.7';
+            input.style.cursor = 'not-allowed';
+        } else {
+            wrapper.style.opacity = '1';
+            input.style.cursor = 'text';
+        }
+    });
+    observer.observe(originalSelect, { childList: true, attributes: true, attributeFilter: ['disabled'] });
+};
+
+// Запускаємо перетворення для існуючих вкладок через пів секунди після старту
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        makeSelectSearchable('kamagYardSelect');
+        makeSelectSearchable('factYardSelect');
+        makeSelectSearchable('compareYardSelect');
+    }, 500);
 });
 
 document.getElementById('hideVirtualFleet').addEventListener('change', renderKamagTable);

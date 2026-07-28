@@ -30,6 +30,7 @@
                 <select id="exportModeSelect" class="export-mode-select hidden">
                     <option value="all">Усі автодвори</option>
                     <option value="current">Поточний автодвір</option>
+                    <option value="custom">Обрані</option>
                 </select>
                 <button id="exportExcelBtn" class="tab-btn btn-action btn-export" style="margin: 0; height: 34px;">
                     Експорт в Excel
@@ -86,6 +87,9 @@
                     <div class="controls-group-right">
                         <button id="saveGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
                             Зберегти (поточний)
+                        </button>
+                        <button id="saveCustomGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
+                            Зберегти обрані
                         </button>
                         <button id="saveAllGoogleBtn" class="tab-btn btn-action btn-save-all auth-hidden">
                             Зберегти ВСІ
@@ -156,6 +160,9 @@
                     <div class="controls-group-right">
                         <button id="saveFactGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
                             Зберегти (поточний)
+                        </button>
+                        <button id="saveCustomFactGoogleBtn" class="tab-btn btn-action btn-save auth-hidden">
+                            Зберегти обрані
                         </button>
                         <button id="saveAllFactGoogleBtn" class="tab-btn btn-action btn-save-all auth-hidden">
                             Зберегти ВСІ
@@ -279,10 +286,13 @@
             
             <div class="form-group">
                 <label>Автодвір (фільтр):
-                    <select id="genYardSelect">
-                        <option value="ALL">Всі автодвори</option>
+                    <select id="genYardSelect" multiple size="7" style="height: 140px; padding: 5px;">
+                        <option value="ALL" selected>Всі автодвори (повний розрахунок)</option>
                     </select>
                 </label>
+                <div style="font-size: 11px; color: #6c757d; margin-top: -12px;">
+                    * Затисніть <b>Ctrl</b> (або <b>Cmd ⌘</b>), щоб обрати декілька
+                </div>
                 
                 <div class="form-row">
                     <label>З дати:
@@ -307,10 +317,44 @@
         <div class="modal-content" style="max-width: 300px; text-align: center; margin-top: 20vh;">
             <h2 style="border-bottom:none; margin-bottom: 5px;">Авторизація</h2>
             <p style="color: #666; margin-bottom: 15px;">Введіть логін та пароль</p>
-            <input type="text" id="authLoginInput" placeholder="Логін" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
-            <input type="password" id="authPassInput" placeholder="Пароль" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 15px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
-            <button id="authConfirmBtn" class="btn-confirm">Увійти</button>
+            
+            <!-- Ізолюємо поля у формі, щоб Chrome не шукав логіни по всій сторінці -->
+            <form onsubmit="return false;" autocomplete="off">
+                <input type="text" id="authLoginInput" autocomplete="username" placeholder="Логін" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 10px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+                <input type="password" id="authPassInput" autocomplete="current-password" placeholder="Пароль" style="width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 15px; font-size: 16px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+                <button id="authConfirmBtn" class="btn-confirm" type="button">Увійти</button>
+            </form>
+            
             <button id="authCancelBtn" style="margin-top: 15px; background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px;">Скасувати</button>
+        </div>
+    </div>
+
+    <div id="exportCustomModal" class="modal">
+        <div class="modal-content generate-modal-content">
+            <span class="close-btn" id="closeExportCustomModal">&times;</span>
+            <h2>Оберіть автодвори для експорту</h2>
+            <div class="form-group">
+                <select id="exportCustomYardsSelect" multiple size="10" style="width: 100%; height: 180px; padding: 5px;"></select>
+                <div style="font-size: 11px; color: #6c757d; margin-top: -12px;">
+                    * Затисніть <b>Ctrl</b> (або <b>Cmd ⌘</b>), щоб обрати декілька
+                </div>
+            </div>
+            <button id="confirmExportCustomBtn" class="btn-confirm">Підтвердити вибір</button>
+        </div>
+    </div>
+
+    <!-- Модалка для вибору кастомних автодворів при збереженні в БД -->
+    <div id="saveCustomModal" class="modal">
+        <div class="modal-content generate-modal-content">
+            <span class="close-btn" id="closeSaveCustomModal">&times;</span>
+            <h2>Оберіть автодвори для збереження</h2>
+            <div class="form-group">
+                <select id="saveCustomYardsSelect" multiple size="10" style="width: 100%; height: 180px; padding: 5px;"></select>
+                <div style="font-size: 11px; color: #6c757d; margin-top: -12px;">
+                    * Затисніть <b>Ctrl</b> (або <b>Cmd ⌘</b>), щоб обрати декілька
+                </div>
+            </div>
+            <button id="confirmSaveCustomBtn" class="btn-confirm">Зберегти обрані в базу</button>
         </div>
     </div>
 

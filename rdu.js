@@ -35,6 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 select.addEventListener('change', renderRduGrid);
+                if (typeof makeSelectSearchable === 'function') {
+                    makeSelectSearchable('rduAdminYardSelect');
+                }
             }
         } else {
             const userYard = sessionStorage.getItem('kamagonAuthYard') || "Невідомий автодвір";

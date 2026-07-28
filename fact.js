@@ -947,6 +947,8 @@ window.exportFactToExcel = async function(workbook) {
     if (exportMode === 'current') {
         const currentYard = document.getElementById('factYardSelect').value;
         if (currentYard) yardsToExport.push(currentYard);
+    } else if (exportMode === 'custom') {
+        yardsToExport = window.customExportYards || [];
     } else {
         yardsToExport = Object.keys(factOpsMatrix).sort();
     }

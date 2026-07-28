@@ -1271,3 +1271,90 @@ td.sticky-col {
 .btn-admin-db:active {
     background-color: #ffd866;
 }
+
+/* =========================================
+   КАСТОМНИЙ ПОШУКОВИЙ SELECT ДЛЯ АВТОДВОРІВ
+   ========================================= */
+.custom-searchable-select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    min-width: 180px;
+}
+
+.custom-searchable-input {
+    width: 100%;
+    height: 34px; /* Як у старих селектів */
+    padding: 0 25px 0 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    background-color: #fff;
+    font-size: 12px;
+    color: #495057;
+    outline: none;
+    cursor: text;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+}
+
+.custom-searchable-input:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+/* Стрілочка випадаючого списку */
+.custom-searchable-select::after {
+    content: '▼';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0.7);
+    font-size: 10px;
+    color: #6c757d;
+    pointer-events: none;
+}
+
+.custom-searchable-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    z-index: 1000;
+    margin-top: 4px;
+}
+
+.custom-searchable-dropdown.show {
+    display: block;
+}
+
+.custom-searchable-option {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #495057;
+    cursor: pointer;
+    transition: background-color 0.1s;
+}
+
+.custom-searchable-option:hover {
+    background-color: #f1f3f5;
+    color: #000;
+    font-weight: 600;
+}
+
+.custom-searchable-option.no-results {
+    color: #adb5bd;
+    font-style: italic;
+    cursor: default;
+}
+.custom-searchable-option.no-results:hover {
+    background-color: #fff;
+    font-weight: normal;
+}
