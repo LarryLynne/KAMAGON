@@ -528,13 +528,26 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
                 },
                 plugins: {
                     legend: { 
-                        display: true,           // ВМИКАЄМО ЛЕГЕНДУ
-                        position: 'bottom',      // СТАВИМО ЇЇ ЗНИЗУ ГРАФІКА
+                        display: true,           
+                        position: 'bottom',      
                         labels: {
-                            boxWidth: 10,       // Зменшуємо ширину квадратика (було 12)
-                            boxHeight: 10,      // Додаємо фіксовану висоту квадратика
-                            padding: 6,         // Зменшуємо відступ між пунктами втричі (було 15)!
-                            font: { size: 10, weight: 'bold' } // Робимо шрифт на 1px меншим (було 11)
+                            boxWidth: 10,       
+                            boxHeight: 10,      
+                            padding: 6,         
+                            font: { size: 10, weight: 'bold' } 
+                        },
+                        // ДОБАВЛЯЕМ КЛИК СЮДА!
+                        onClick: function(e, legendItem, legend) {
+                            const index = legendItem.datasetIndex;
+                            const isCurrentlyVisible = legend.chart.isDatasetVisible(index);
+                            
+                            for (let id in Chart.instances) {
+                                let chartInstance = Chart.instances[id];
+                                if (chartInstance.data.datasets.length > index) {
+                                    chartInstance.setDatasetVisibility(index, !isCurrentlyVisible);
+                                    chartInstance.update();
+                                }
+                            }
                         }
                     },
                     tooltip: { callbacks: { title: (items) => `День: ${dateStr} о ${items[0].label}` } }

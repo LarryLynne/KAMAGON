@@ -1885,9 +1885,26 @@ function renderKamagTable() {
                 interaction: { mode: 'index', intersect: false }, 
                 scales: { x: { display: false }, y: { type: 'linear', display: false, beginAtZero: true } }, 
                 plugins: { 
-                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 }, padding: 4 } }, 
+                    legend: { 
+                        display: true, 
+                        position: 'bottom', 
+                        labels: { boxWidth: 12, font: { size: 10 }, padding: 4 },
+                        // ДОДАЄМО КАСТОМНИЙ КЛІК ПО ЛЕГЕНДІ
+                        onClick: function(e, legendItem, legend) {
+                            const index = legendItem.datasetIndex;
+                            const isCurrentlyVisible = legend.chart.isDatasetVisible(index);
+                            
+                            // Проходимо по всіх графіках вкладки "Розрахунок" і синхронно перемикаємо
+                            if (window.myDayCharts) {
+                                window.myDayCharts.forEach(chart => {
+                                    chart.setDatasetVisibility(index, !isCurrentlyVisible);
+                                    chart.update();
+                                });
+                            }
+                        }
+                    }, 
                     tooltip: { callbacks: { title: (items) => `${d} ${items[0].label}`, label: (item) => `${item.dataset.label}: ${item.raw}` } } 
-                }, 
+                },
                 layout: { padding: 0 } 
             }
         }));
