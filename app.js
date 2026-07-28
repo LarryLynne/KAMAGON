@@ -1897,8 +1897,9 @@ function renderKamagTable() {
 document.getElementById('kamagYardSelect').addEventListener('change', renderKamagTable);
 
 // === НОВИЙ ФУНКЦІОНАЛ ПРОТЯГУВАННЯ (ПЕНЗЛИК) ДЛЯ ВКЛАДКИ РОЗРАХУНОК ===
+// === НОВИЙ ФУНКЦІОНАЛ ПРОТЯГУВАННЯ (ПЕНЗЛИК) ДЛЯ ВКЛАДКИ РОЗРАХУНОК ===
 let isKamagMouseDown = false;
-let kamagPaintMode = 0;
+let kamagIsPainting = false; // true - зафарбовуємо, false - стираємо
 let lastKDay = null;
 let lastKType = null;
 let lastKIdx = null;
@@ -1908,13 +1909,13 @@ const kamagWrapper = document.getElementById('kamagTableWrapper');
 
 // 1. Початок малювання або очищення рядка
 kamagWrapper.addEventListener('mousedown', function(e) {
-    // Логіка очищення всього рядка (клік по заголовку ТЗ)
+    // Логіка очищення всього рядка
     if (e.target.classList.contains('fleet-row-header')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
         const header = e.target;
         const yard = header.getAttribute('data-yard');
         const type = header.getAttribute('data-type');
-        const idx = parseInt(header.getAttribute('data-index'));
+        const idx = parseInt(header.getAttribute('data-index'), 10);
 
         if (!confirm(`Очистити всі одинички для "${header.innerText}" за обраний період відображення?`)) return;
 
@@ -1933,32 +1934,31 @@ kamagWrapper.addEventListener('mousedown', function(e) {
     // Початок протягування клітинок
     if (e.target.classList.contains('kamag-editable')) {
         if (sessionStorage.getItem('kamagonAuth') !== 'true') return;
-        e.preventDefault(); // Щоб не виділявся текст при протягуванні
+        e.preventDefault(); 
         isKamagMouseDown = true;
 
         const cell = e.target;
         const yard = cell.getAttribute('data-yard');
         const day = cell.getAttribute('data-day');
-        const hour = parseInt(cell.getAttribute('data-hour'));
+        const hour = parseInt(cell.getAttribute('data-hour'), 10);
         const type = cell.getAttribute('data-type'); 
-        const idx = parseInt(cell.getAttribute('data-index'));
+        const idx = parseInt(cell.getAttribute('data-index'), 10);
 
         const currentState = fleetActiveState[yard][day][hour][type][idx];
-        
-        // Визначаємо режим: малювати (1 або 2) чи стирати (0)
-        if (currentState > 0) {
-            kamagPaintMode = 0; 
-        } else {
+        kamagIsPainting = currentState === 0; // Якщо порожньо - будемо малювати, інакше - стирати
+
+        let newState = 0;
+        if (kamagIsPainting) {
             const wasSystemActive = systemFleetState[yard] && 
                                     systemFleetState[yard][day] && 
                                     systemFleetState[yard][day][hour] && 
                                     systemFleetState[yard][day][hour][type] && 
                                     systemFleetState[yard][day][hour][type][idx] === 1;
-            kamagPaintMode = wasSystemActive ? 1 : 2; 
+            newState = wasSystemActive ? 1 : 2; 
         }
         
-        fleetActiveState[yard][day][hour][type][idx] = kamagPaintMode;
-        updateKamagCellVisual(cell, kamagPaintMode, type, idx, yard);
+        fleetActiveState[yard][day][hour][type][idx] = newState;
+        updateKamagCellVisual(cell, newState, type, idx, yard);
 
         lastKDay = day;
         lastKType = type;
@@ -1975,28 +1975,46 @@ kamagWrapper.addEventListener('mouseover', function(e) {
         const cell = e.target;
         const yard = cell.getAttribute('data-yard');
         const day = cell.getAttribute('data-day');
-        const hour = parseInt(cell.getAttribute('data-hour'));
+        const hour = parseInt(cell.getAttribute('data-hour'), 10);
         const type = cell.getAttribute('data-type'); 
-        const idx = parseInt(cell.getAttribute('data-index'));
+        const idx = parseInt(cell.getAttribute('data-index'), 10);
 
-        // Якщо ведемо по тому ж самому рядку машини
         if (day === lastKDay && type === lastKType && idx === lastKIdx) {
             const startH = Math.min(lastKHour, hour);
             const endH = Math.max(lastKHour, hour);
             
-            // Заповнюємо всі проміжні клітинки (якщо мишка рухається швидко)
             for (let h = startH; h <= endH; h++) {
-                fleetActiveState[yard][day][h][type][idx] = kamagPaintMode;
+                let newState = 0;
+                if (kamagIsPainting) {
+                    // Динамічно перевіряємо КОЖНУ клітинку: чи була вона системною (1) або чисто ручною (2)
+                    const wasSystemActive = systemFleetState[yard] && 
+                                            systemFleetState[yard][day] && 
+                                            systemFleetState[yard][day][h] && 
+                                            systemFleetState[yard][day][h][type] && 
+                                            systemFleetState[yard][day][h][type][idx] === 1;
+                    newState = wasSystemActive ? 1 : 2;
+                }
+                
+                fleetActiveState[yard][day][h][type][idx] = newState;
                 const targetCell = document.querySelector(`.kamag-editable[data-yard="${yard}"][data-day="${day}"][data-hour="${h}"][data-type="${type}"][data-index="${idx}"]`);
                 if (targetCell) {
-                    updateKamagCellVisual(targetCell, kamagPaintMode, type, idx, yard);
+                    updateKamagCellVisual(targetCell, newState, type, idx, yard);
                 }
             }
             lastKHour = hour;
         } else {
-            // Якщо перескочили на інший рядок - просто оновлюємо поточну клітинку
-            fleetActiveState[yard][day][hour][type][idx] = kamagPaintMode;
-            updateKamagCellVisual(cell, kamagPaintMode, type, idx, yard);
+            let newState = 0;
+            if (kamagIsPainting) {
+                const wasSystemActive = systemFleetState[yard] && 
+                                        systemFleetState[yard][day] && 
+                                        systemFleetState[yard][day][hour] && 
+                                        systemFleetState[yard][day][hour][type] && 
+                                        systemFleetState[yard][day][hour][type][idx] === 1;
+                newState = wasSystemActive ? 1 : 2;
+            }
+            fleetActiveState[yard][day][hour][type][idx] = newState;
+            updateKamagCellVisual(cell, newState, type, idx, yard);
+            
             lastKDay = day;
             lastKType = type;
             lastKIdx = idx;
@@ -2009,28 +2027,29 @@ kamagWrapper.addEventListener('mouseover', function(e) {
 document.addEventListener('mouseup', function() {
     if (isKamagMouseDown) {
         isKamagMouseDown = false;
-        renderKamagTable(); // Тільки зараз оновлюємо тотали і діаграми
+        renderKamagTable();
     }
 });
 
-// Допоміжна функція для швидкої зміни кольору клітинки без повного перерендеру таблиці
+// Допоміжна функція для візуалу (з жорсткою типізацією для надійності)
 function updateKamagCellVisual(cell, mode, type, idx, yard) {
     cell.innerText = mode > 0 ? 1 : '';
-    cell.className = 'kamag-cell kamag-editable'; // Скидаємо класи
-    
+    cell.className = 'kamag-cell kamag-editable'; 
+
     if (mode > 0) {
-        const availK = fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0;
-        const availM = fleetDictionary[yard] ? fleetDictionary[yard].man : 0;
+        const availK = Number(fleetDictionary[yard] ? fleetDictionary[yard].kamag : 0);
+        const availM = Number(fleetDictionary[yard] ? fleetDictionary[yard].man : 0);
         const isKamag = type === 'kamag';
         const isManual = mode === 2;
+        const numIdx = Number(idx);
 
         if (isManual) {
-            if (isKamag && idx >= availK) cell.classList.add('kamag-manual-virtual');
-            else if (!isKamag && idx >= availM) cell.classList.add('kamag-manual-virtual');
+            if (isKamag && numIdx >= availK) cell.classList.add('kamag-manual-virtual');
+            else if (!isKamag && numIdx >= availM) cell.classList.add('kamag-manual-virtual');
             else cell.classList.add('kamag-manual-physical');
         } else {
-            if (isKamag && idx >= availK) cell.classList.add('kamag-active-virtual');
-            else if (!isKamag && idx >= availM) cell.classList.add('kamag-active-virtual');
+            if (isKamag && numIdx >= availK) cell.classList.add('kamag-active-virtual');
+            else if (!isKamag && numIdx >= availM) cell.classList.add('kamag-active-virtual');
             else cell.classList.add('kamag-active');
         }
     }

@@ -610,8 +610,32 @@ window.exportCompareToExcel = async function(workbook) {
 
     for (const yard of yardsToExport) {
         const yardPlanRows = (bulkData.planRows || []).filter(row => row[0] === yard);
-        const yardFactRows = (bulkData.factRows || []).filter(row => row[0] === yard);
-        const yardRduRows = (bulkData.rduRows || []).filter(row => row[0] === yard);
+        let yardFactRows = (bulkData.factRows || []).filter(row => row[0] === yard);
+        let yardRduRows = (bulkData.rduRows || []).filter(row => row[0] === yard); // ТУТ ЗМІНИЛИ const на let
+
+        // ФОЛБЕК 1: Довантажуємо ФАКТ, якщо його немає
+        if (yardFactRows.length === 0) {
+            try {
+                const factRes = await fetch(`${RESULTS_SCRIPT_URL}?action=getFactAggregatedData&yard=${encodeURIComponent(yard)}`).then(r => r.json());
+                if (factRes.savedRows) {
+                    yardFactRows = factRes.savedRows;
+                }
+            } catch (err) {
+                console.warn(`Не вдалося довантажити факт для автодвору ${yard}`, err);
+            }
+        }
+
+        // ФОЛБЕК 2: Довантажуємо РДУ, якщо його немає (саме це підніме червону лінію)
+        if (yardRduRows.length === 0) {
+            try {
+                const rduRes = await fetch(`${RESULTS_SCRIPT_URL}?action=getRduAggregatedData&yard=${encodeURIComponent(yard)}`).then(r => r.json());
+                if (rduRes.savedRows) {
+                    yardRduRows = rduRes.savedRows;
+                }
+            } catch (err) {
+                console.warn(`Не вдалося довантажити РДУ для автодвору ${yard}`, err);
+            }
+        }
 
         if (yardPlanRows.length === 0 && yardFactRows.length === 0 && yardRduRows.length === 0) continue;
 
