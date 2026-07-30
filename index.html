@@ -14,7 +14,10 @@
     <div class="header-panel">
         <div class="top-branding">
             <h1 class="logo">KAMAG<span>ON</span></h1>
-            <div id="loginBtn" class="login-info">Увійти</div>
+            <div style="position: absolute; right: 20px; display: flex; align-items: center; gap: 15px;">
+                <div id="changePassBtn" class="auth-hidden" style="cursor: pointer; font-size: 12px; color: #cbd5e1; text-decoration: underline;">Змінити пароль</div>
+                <div id="loginBtn" class="login-info" style="position: relative; right: 0;">Увійти</div>
+            </div>
         </div>
 
         <div class="tabs">
@@ -355,6 +358,22 @@
                 </div>
             </div>
             <button id="confirmSaveCustomBtn" class="btn-confirm">Зберегти обрані в базу</button>
+        </div>
+    </div>
+
+    <div id="changePassModal" class="modal">
+        <div class="modal-content" style="max-width: 320px; text-align: center; margin-top: 20vh; padding: 25px;">
+            <h2 style="border-bottom:none; margin-bottom: 5px; font-size: 18px;">Зміна пароля</h2>
+            <p style="color: #666; margin-bottom: 20px; font-size: 12px;">Введіть старий та новий пароль</p>
+            
+            <form onsubmit="return false;" autocomplete="off" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="password" id="oldPassInput" placeholder="Старий пароль" style="width: 100%; box-sizing: border-box; padding: 10px; font-size: 14px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+                <input type="password" id="newPassInput" placeholder="Новий пароль" style="width: 100%; box-sizing: border-box; padding: 10px; font-size: 14px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+                <input type="password" id="confirmNewPassInput" placeholder="Повторіть новий пароль" style="width: 100%; box-sizing: border-box; padding: 10px; font-size: 14px; text-align: center; border: 1px solid #ced4da; border-radius: 6px;">
+                <button id="confirmChangePassBtn" class="btn-confirm" type="button" style="margin-top: 10px;">Змінити пароль</button>
+            </form>
+            
+            <button id="cancelChangePassBtn" style="margin-top: 15px; background: none; border: none; color: #888; cursor: pointer; text-decoration: underline; font-size: 13px;">Скасувати</button>
         </div>
     </div>
 

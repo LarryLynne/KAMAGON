@@ -8,6 +8,80 @@ let fleetActiveState = {};
 let systemFleetState = {}; // Базовое состояние автоматического расчета системы
 let yardVirtualTypes = {}; // <-- НОВИЙ: Словник типів доп. транспорту окремо для кожного двора
 
+
+// === ЛОГІКА ЗМІНИ ПАРОЛЯ ===
+const changePassModal = document.getElementById('changePassModal');
+const changePassBtn = document.getElementById('changePassBtn');
+
+if (changePassBtn) {
+    changePassBtn.addEventListener('click', () => {
+        changePassModal.style.display = 'block';
+        document.getElementById('oldPassInput').value = '';
+        document.getElementById('newPassInput').value = '';
+        document.getElementById('confirmNewPassInput').value = '';
+        document.getElementById('oldPassInput').focus();
+    });
+}
+
+document.getElementById('cancelChangePassBtn').addEventListener('click', () => {
+    changePassModal.style.display = 'none';
+});
+
+document.getElementById('confirmChangePassBtn').addEventListener('click', async () => {
+    const activeUser = sessionStorage.getItem('kamagonAuthUser');
+    if (!activeUser) return alert("Помилка авторизації!");
+
+    const oldPass = document.getElementById('oldPassInput').value.trim();
+    const newPass = document.getElementById('newPassInput').value.trim();
+    const confirmPass = document.getElementById('confirmNewPassInput').value.trim();
+
+    // 1. Валідація
+    if (!oldPass || !newPass || !confirmPass) return alert("Заповніть всі поля!");
+    if (newPass !== confirmPass) return alert("Нові паролі не співпадають!");
+    if (newPass.length < 4) return alert("Новий пароль має містити щонайменше 4 символи!");
+    
+    // Перевіряємо старий пароль по локальному словнику
+    const userObj = usersDictionary[activeUser];
+    if (!userObj || String(userObj.pass) !== oldPass) {
+        return alert("Невірний старий пароль!");
+    }
+
+    const btn = document.getElementById('confirmChangePassBtn');
+    const originalText = btn.innerText;
+    btn.innerText = "⏳ Збереження...";
+    btn.disabled = true;
+
+    try {
+        // Відправляємо запит на збереження (використовуємо твій RESULTS_SCRIPT_URL)
+        const response = await fetch(DICT_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                action: 'changePassword',
+                username: activeUser,
+                newPassword: newPass
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Оновлюємо локальний словник, щоб не треба було перезавантажувати сторінку
+            usersDictionary[activeUser].pass = newPass;
+            alert("Пароль успішно змінено!");
+            changePassModal.style.display = 'none';
+        } else {
+            alert("Помилка на сервері: " + (result.error || "Невідома помилка"));
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Помилка зв'язку з сервером.");
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+});
+
 function checkAuth() {
     return new Promise((resolve) => {
         if (sessionStorage.getItem('kamagonAuth') === 'true') {
