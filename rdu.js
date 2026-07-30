@@ -6,6 +6,39 @@ let rduPaintMode = 1; // 1 - закрашивать, 0 - -стирать
 let lastPaintedHour = null;
 let lastPaintedVehicle = null;
 
+let lockedRduDates = {};
+
+// НОВА ФУНКЦІЯ: Перевіряє статус і блокує/розблоковує кнопку
+function updateRduSaveButtonState() {
+    const role = sessionStorage.getItem('kamagonAuthRole');
+    const userYard = getSelectedRduYard();
+    const rawDate = document.getElementById('rduWorkDate').value;
+    const btn = document.getElementById('saveRduGoogleBtn');
+    
+    if (!rawDate || !userYard || !btn) return;
+
+    const [yyyy, mm, dd] = rawDate.split('-');
+    const dateStr = `${dd}.${mm}.${yyyy}`;
+    const lockKey = `${userYard}_${dateStr}`;
+
+    // Якщо роль РДУ і цей день вже збережений/завантажений
+    if (role === 'РДУ' && lockedRduDates[lockKey]) {
+        btn.disabled = true;
+        btn.innerText = "🔒 Дані вже в базі";
+        btn.style.backgroundColor = "#e2e8f0"; // Сірий фон
+        btn.style.color = "#64748b";           // Сірий текст
+        btn.style.cursor = "not-allowed";
+        btn.style.borderColor = "#cbd5e1";
+    } else {
+        btn.disabled = false;
+        btn.innerText = "Зберегти день";
+        btn.style.backgroundColor = ""; 
+        btn.style.color = "";
+        btn.style.cursor = "pointer";
+        btn.style.borderColor = "";
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const tabRdu = document.getElementById('tabRdu');
     const containerRdu = document.getElementById('tableContainerRdu');
@@ -16,32 +49,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
     rduDateInput.value = today.toISOString().split('T')[0];
 
+    // ЗАМЕНИТЬ обработчик tabRdu.addEventListener:
     tabRdu.addEventListener('click', () => {
         switchTab(tabRdu, containerRdu);
         
-        const role = sessionStorage.getItem('kamagonAuthRole');
         const container = document.getElementById('rduYardContainer');
         
-        if (role === 'Адмін') {
-            if (!document.getElementById('rduAdminYardSelect')) {
-                container.innerHTML = `Автодвір: <select id="rduAdminYardSelect" style="height: 28px; padding: 0 5px; font-size: 11px; min-width: 140px; border-color: #adb5bd Dom;"></select>`;
-                const select = document.getElementById('rduAdminYardSelect');
-                
+        // Создаем селект один раз, если его еще нет
+        if (!document.getElementById('rduYardSelect')) {
+            container.innerHTML = `Автодвір: <select id="rduYardSelect" style="height: 28px; padding: 0 5px; font-size: 11px; min-width: 140px; border-color: #adb5bd;"></select>`;
+            const select = document.getElementById('rduYardSelect');
+            
+            const role = sessionStorage.getItem('kamagonAuthRole');
+            
+            if (role === 'Адмін') {
+                // Админ видит все дворы
                 const uniqueYards = Object.keys(yardDictionary).map(k => yardDictionary[k].yard).filter((v, i, a) => v && a.indexOf(v) === i).sort();
                 uniqueYards.forEach(y => {
                     const opt = document.createElement('option');
                     opt.value = opt.textContent = y;
                     select.appendChild(opt);
                 });
+            } else {
+                // РДУ видит только свои дворы (поддержка нескольких через запятую)
+                const userYard = sessionStorage.getItem('kamagonAuthYard') || "";
+                const allowedYards = userYard.split(',').map(y => y.trim()).filter(Boolean);
                 
-                select.addEventListener('change', renderRduGrid);
-                if (typeof makeSelectSearchable === 'function') {
-                    makeSelectSearchable('rduAdminYardSelect');
+                allowedYards.forEach(y => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.textContent = y;
+                    select.appendChild(opt);
+                });
+                
+                // Если двор только один - блокируем выбор. Если больше - можно переключаться!
+                if (allowedYards.length <= 1) {
+                    select.disabled = true;
                 }
             }
-        } else {
-            const userYard = sessionStorage.getItem('kamagonAuthYard') || "Невідомий автодвір";
-            container.innerHTML = `Диспетчер РДУ: <span style="color: #0284c7;">${userYard}</span>`;
+            
+            select.addEventListener('change', renderRduGrid);
+            
+            // Сразу делаем его красивым и с поиском
+            if (typeof makeSelectSearchable === 'function') {
+                makeSelectSearchable('rduYardSelect');
+            }
         }
         
         renderRduGrid();
@@ -84,12 +135,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function getSelectedRduYard() {
-    const role = sessionStorage.getItem('kamagonAuthRole');
-    if (role === 'Адмін') {
-        const select = document.getElementById('rduAdminYardSelect');
-        return select ? select.value : "";
-    }
-    return sessionStorage.getItem('kamagonAuthYard');
+    // Теперь мы всегда читаем значение из селекта, независимо от роли
+    const select = document.getElementById('rduYardSelect');
+    return select ? select.value : "";
 }
 
 function renderRduGrid() {
@@ -174,6 +222,7 @@ function renderRduGrid() {
     wrapper.innerHTML = html;
 
     attachRduMouseEvents();
+    updateRduSaveButtonState();
 }
 
 function attachRduMouseEvents() {
@@ -241,14 +290,62 @@ function updateRowSum(trElement) {
 async function saveRduToGoogle() {
     const userYard = getSelectedRduYard();
     const activeUser = sessionStorage.getItem('kamagonAuthUser') || "Невідомий";
+    const role = sessionStorage.getItem('kamagonAuthRole');
     const rawDate = document.getElementById('rduWorkDate').value;
+    
     if (!rawDate || !userYard) return alert("Оберіть дату та автодвір!");
 
     const [yyyy, mm, dd] = rawDate.split('-');
     const dateStr = `${dd}.${mm}.${yyyy}`;
-
+    const lockKey = `${userYard}_${dateStr}`;
     const btn = document.getElementById('saveRduGoogleBtn');
-    btn.innerText = "⏳ Збереження..."; btn.disabled = true;
+
+    // 1. Локальна перевірка (якщо ми ВЖЕ знаємо, що день заблоковано)
+    if (role === 'РДУ' && lockedRduDates[lockKey]) {
+        return alert("Ці дані вже були збережені раніше. Для перезапису зверніться до Адміністратора.");
+    }
+
+    btn.innerText = "⏳ Перевірка..."; 
+    btn.disabled = true;
+
+    // 2. ЗАХИСТ ВІД СЛІПОГО ПЕРЕЗАПИСУ:
+    // Якщо це РДУ, і статус цього дня ще невідомий (undefined), робимо швидкий запит до бази
+    if (role === 'РДУ' && lockedRduDates[lockKey] === undefined) {
+        try {
+            const checkRes = await fetch(`${RESULTS_SCRIPT_URL}?action=getRduAggregatedData&yard=${encodeURIComponent(userYard)}`);
+            const checkData = await checkRes.json();
+            
+            let hasExistingData = false;
+            if (checkData.savedRows && checkData.savedRows.length > 0) {
+                // Шукаємо, чи є в базі хоча б один рядок саме за цю дату
+                hasExistingData = checkData.savedRows.some(row => {
+                    let dayStr = String(row[1]);
+                    if (dayStr.includes('T') && dayStr.includes('Z')) {
+                        const d = new Date(dayStr);
+                        dayStr = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+                    }
+                    return dayStr === dateStr;
+                });
+            }
+            
+            if (hasExistingData) {
+                // Дані вже є! Блокуємо і скасовуємо збереження
+                lockedRduDates[lockKey] = true;
+                updateRduSaveButtonState();
+                return alert("Виявлено існуючі дані в базі! Ви не можете перезаписати їх наосліп. Зверніться до Адміністратора.");
+            } else {
+                // База порожня для цього дня, дозволяємо зберігати
+                lockedRduDates[lockKey] = false; 
+            }
+        } catch (e) {
+            btn.innerText = "❌ Помилка зв'язку";
+            setTimeout(() => updateRduSaveButtonState(), 2000);
+            return alert("Не вдалося перевірити базу даних перед збереженням. Спробуйте ще раз.");
+        }
+    }
+
+    // 3. Якщо перевірка пройдена успішно (або це Адмін) — починаємо збереження
+    btn.innerText = "⏳ Збереження..."; 
 
     const vehicles = Object.keys(rduStateMatrix[dateStr] || {});
     const kamags = vehicles.filter(v => v.startsWith('Kamag')).sort((a,b) => parseInt(a.match(/\d+/)) - parseInt(b.match(/\d+/)));
@@ -274,14 +371,19 @@ async function saveRduToGoogle() {
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({ action: 'saveRduAggregated', yard: userYard, rows: aggregatedRows, dates: [dateStr] })
         });
+        
+        // Після успішного збереження відразу блокуємо день для РДУ
+        lockedRduDates[lockKey] = true;
         btn.innerText = "✅ Збережено!";
     } catch (e) {
         alert("Помилка збереження.");
         btn.innerText = "❌ Помилка";
     }
-    setTimeout(() => { btn.innerText = "Зберегти день"; btn.disabled = false; }, 2000);
+    
+    setTimeout(() => { 
+        updateRduSaveButtonState(); 
+    }, 2000);
 }
-
 async function loadRduFromGoogle() {
     const userYard = getSelectedRduYard();
     const rawDate = document.getElementById('rduWorkDate').value;
@@ -307,6 +409,8 @@ async function loadRduFromGoogle() {
         }
 
         if (data.savedRows && data.savedRows.length > 0) {
+            let hasDataForCurrentDay = false; // Трекаємо чи є дані саме за цей день
+
             data.savedRows.forEach(row => {
                 let [y, day, hour, fleetCountStr] = row;
                 let dayStr = String(day);
@@ -316,6 +420,8 @@ async function loadRduFromGoogle() {
                 }
 
                 if (dayStr === dateStr) {
+                    hasDataForCurrentDay = true; // Знайшли дані!
+                    
                     let countStr = String(fleetCountStr);
                     const [kStr, mStr] = countStr.split('|');
                     
@@ -337,8 +443,16 @@ async function loadRduFromGoogle() {
                     }
                 }
             });
+
+            // Блокуємо, якщо дані знайдені
+            const lockKey = `${userYard}_${dateStr}`;
+            lockedRduDates[lockKey] = hasDataForCurrentDay;
+
             document.getElementById('fileStatus').innerText = "Дані РДУ завантажено з бази.";
         } else {
+            // Якщо даних немає, знімаємо блокування
+            const lockKey = `${userYard}_${dateStr}`;
+            lockedRduDates[lockKey] = false;
             alert("Збережених ручних даних РДУ для цього дня не знайдено.");
         }
         renderRduGrid();

@@ -29,10 +29,28 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        const userYard = sessionStorage.getItem('kamagonAuthYard');
+        const userYard = sessionStorage.getItem('kamagonAuthYard') || "";
+        
         if (role === 'РДУ' && select) {
-            select.value = userYard;
-            select.disabled = true;
+            // Разбиваем строку на массив по запятой и убираем лишние пробелы
+            const allowedYards = userYard.split(',').map(y => y.trim()).filter(y => y !== "");
+            
+            // Очищаем текущие опции
+            select.innerHTML = '';
+            
+            // Заполняем список только теми дворами, которые доступны этому РДУ
+            allowedYards.forEach(y => {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = y;
+                select.appendChild(opt);
+            });
+            
+            // Если доступен только один двор - блокируем список. Если несколько - оставляем активным!
+            if (allowedYards.length === 1) {
+                select.disabled = true;
+            } else {
+                select.disabled = false;
+            }
         }
     });
 

@@ -59,20 +59,40 @@ function checkAuth() {
 }
 
 // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ НАМЕРТВО ФИКСИРОВАНИЯ АВТОДВОРА ПОЛЬЗОВАТЕЛЯ РДУ
+// УНІВЕРСАЛЬНА ФУНКЦІЯ ДЛЯ БЛОКУВАННЯ / ЗАПОВНЕННЯ ДВОРІВ РДУ (ПІДТРИМКА КІЛЬКОХ ЧЕРЕЗ КОМУ)
 function enforceUserYardLock(userYard) {
     if (!userYard) return;
-    ['kamagYardSelect', 'factYardSelect', 'compareYardSelect'].forEach(id => {
+    
+    // Розбиваємо рядок на масив (наприклад: "Київ ЗХ, Київ СХ" -> ["Київ ЗХ", "Київ СХ"])
+    const allowedYards = userYard.split(',').map(y => y.trim()).filter(Boolean);
+
+    ['kamagYardSelect', 'factYardSelect', 'compareYardSelect', 'rduYardSelect'].forEach(id => {
         const select = document.getElementById(id);
         if (select) {
-            // Если в списке вдруг нет такого двора, принудительно создаем его
-            let optionExists = Array.from(select.options).some(opt => opt.value === userYard);
-            if (!optionExists) {
-                const opt = document.createElement('option');
-                opt.value = opt.textContent = userYard;
-                select.appendChild(opt);
+            const role = sessionStorage.getItem('kamagonAuthRole');
+            
+            if (role === 'РДУ') {
+                select.innerHTML = ''; // Очищаємо список
+                
+                allowedYards.forEach(y => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.textContent = y;
+                    select.appendChild(opt);
+                });
+
+                // Якщо у РДУ лише один двір — блокуємо селект. Якщо кілька — залишаємо вибір активним між ними!
+                if (allowedYards.length === 1) {
+                    select.value = allowedYards[0];
+                    select.disabled = true; 
+                } else {
+                    select.disabled = false;
+                    select.value = allowedYards[0]; // Обираємо перший за замовчуванням
+                }
+            } else {
+                // Для адмінів залишаємо все доступним
+                select.disabled = false;
             }
-            select.value = userYard;
-            select.disabled = true; // Запрещаем менять
+            
             select.dispatchEvent(new Event('change'));
         }
     });
