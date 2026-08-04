@@ -68,7 +68,7 @@ function clearCompareDashboard() {
 async function loadUnifiedCompareData() {
     const role = sessionStorage.getItem('kamagonAuthRole');
     const select = document.getElementById('compareYardSelect');
-    const yard = role === 'Адмін' ? (select ? select.value : "") : sessionStorage.getItem('kamagonAuthYard');
+    const yard = select ? select.value : "";
     
     const startVal = document.getElementById('compareStartDate').value;
     const endVal = document.getElementById('compareEndDate').value;
@@ -297,8 +297,16 @@ async function loadUnifiedCompareData() {
 function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, planOps, autoFactOps) {
     const container = document.getElementById('compareTableWrapper');
     
+    // 1. ВБИВАЄМО СТАРИЙ КОНТЕЙНЕР ДІАГРАМ (він крав 260px висоти знизу)
+    const oldChartArea = document.getElementById('compareChartArea');
+    if (oldChartArea) oldChartArea.style.display = 'none';
+    
+    // 2. ДОЗВОЛЯЄМО ТАБЛИЦІ РОЗШИРИТИСЯ НА ВСЮ ВИСОТУ
+    container.style.overflowY = 'visible';
+    container.style.overflowX = 'auto';
+
     // Вичисляємо загальну кількість колонок для коректного рядка-роздільника операцій
-    const totalCols = 1 + (datesList.length * 26) + 2; 
+    const totalCols = 1 + (datesList.length * 26) + 2;
 
     const dayNamesShort = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
@@ -342,22 +350,19 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
                 const pBit = planFleet[v][dStr][h];
                 const rBit = rduFleet[v][dStr][h];
                 
-                const pActive = pBit > 0; // ДОДАНО
-                const rActive = rBit > 0; // ДОДАНО
-                
                 let bgStyle = "";
                 let displayVal = "";
                 let borderStyle = h === 0 ? "border-left: 2px solid #6c757d;" : "";
 
-                if (pActive && rActive) { // ЗАМІНЕНО
+                if (pBit === 1 && rBit === 1) {
                     bgStyle = "background-color: #ea580c; color: #fff; font-weight: bold;"; 
                     displayVal = "1";
                     dayPlanHours++; dayRduHours++;
-                } else if (!pActive && rActive) { // ЗАМІНЕНО
+                } else if (pBit === 0 && rBit === 1) {
                     bgStyle = "background-color: #be123c; color: #fff; font-weight: bold;"; 
                     displayVal = "1";
                     dayRduHours++;
-                } else if (pActive && !rActive) { // ЗАМІНЕНО
+                } else if (pBit === 1 && rBit === 0) {
                     bgStyle = "background-color: #ffedd5; color: #9a3412; font-weight: bold; border: 1px solid #fed7aa;"; 
                     displayVal = "0";
                     dayPlanHours++;
@@ -470,21 +475,9 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
     
     html += `</tbody></table>`;
     
-    // --- ДОДАЄМО ЛЕГЕНДУ ЗВІРКИ ВНИЗУ ТАБЛИЦІ (ВКЛАДКА РЕЗУЛЬТАТИ) ---
-    /*html += `
-    <div style="margin: 15px 0 25px 0; padding: 12px 15px; background: #f8fafc; border: 1px solid #dee2e6; border-radius: 6px; font-size: 11px; color: #475569; display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
-        <div style="font-weight: bold; color: #1e293b; font-size: 12px; margin-right: 5px;">🎨 Легенда звірки:</div>
-        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#ea580c; border-radius:3px;"></span> 1 — Збіг (План = РДУ)</div>
-        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#be123c; border-radius:3px;"></span> 1 — Надлишок (РДУ > План)</div>
-        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#ffedd5; border:1px solid #fed7aa; border-radius:3px;"></span> 0 — Простій (План > РДУ)</div>
-        <div style="display: flex; align-items: center; gap: 6px;"><span style="display:inline-block; width:16px; height:16px; background:#fff; border:1px solid #ccc; border-radius:3px;"></span> 0 — Не задіяно (План 0, РДУ 0)</div>
-        <div style="display: flex; align-items: center; gap: 6px; margin-left: auto;"><span style="display:inline-block; padding: 2px 6px; background:#f0fdf4; color:#16a34a; font-weight:bold; border-radius:3px;">+</span><span style="display:inline-block; padding: 2px 6px; background:#fef2f2; color:#dc2626; font-weight:bold; border-radius:3px;">-</span> Різниця операцій (Факт мінус План)</div>
-    </div>`;*/
-
     container.innerHTML = html;
 }
 
-// --- Найти и заменить функцию buildCombinedChart в compare.js ---
 function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCap) {
     if (window.myCombinedCompareCharts) {
         window.myCombinedCompareCharts.forEach(c => c.destroy());
@@ -495,24 +488,10 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
         const ctx = document.getElementById(`combinedCompareChart_${index}`);
         if (!ctx) return;
 
-        const parentDiv = ctx.parentElement;
-        
-        // ЗАХИСТ: Якщо таблиця ще не розтягнулася, задаємо базову ширину, щоб графік не зник
-        let chartWidth = parentDiv.clientWidth;
-        if (chartWidth < 100) {
-            chartWidth = 600; 
-        }
-        
-        ctx.width = chartWidth;
-        ctx.height = 250; // Збільшили висоту, щоб влізла легенда
-
-        const labels = [];
-        for (let h = 0; h < 24; h++) labels.push(`${h}:00`);
-
         const chart = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: labels,
+                labels: Array(24).fill('').map((_, h) => `${h}:00`),
                 datasets: [
                     { type: 'bar', label: 'Операції (План)', data: planOps[dateStr], backgroundColor: 'rgba(255, 170, 0, 0.6)', borderColor: '#ffaa00', borderWidth: 1, borderRadius: 2, order: 3 },
                     { type: 'bar', label: 'Операції (Факт)', data: autoFactOps[dateStr], backgroundColor: 'rgba(16, 185, 129, 0.6)', borderColor: '#10b981', borderWidth: 1, borderRadius: 2, order: 4 },
@@ -522,7 +501,7 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
             },
             options: {
                 animation: false,
-                responsive: false, 
+                responsive: true,
                 maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 scales: {
@@ -546,15 +525,14 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
                 },
                 plugins: {
                     legend: { 
-                        display: true,           
-                        position: 'bottom',      
+                        display: true,
+                        position: 'bottom',
                         labels: {
-                            boxWidth: 10,       
-                            boxHeight: 10,      
-                            padding: 6,         
-                            font: { size: 10, weight: 'bold' } 
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            padding: 6,
+                            font: { size: 10, weight: 'bold' }
                         },
-                        // ДОБАВЛЯЕМ КЛИК СЮДА!
                         onClick: function(e, legendItem, legend) {
                             const index = legendItem.datasetIndex;
                             const isCurrentlyVisible = legend.chart.isDatasetVisible(index);
@@ -576,6 +554,7 @@ function buildCombinedChart(datesList, planOps, autoFactOps, planCap, autoFactCa
         window.myCombinedCompareCharts.push(chart);
     });
 }
+
 
 // === ПОВНІСТЮ ЗАМІНИТИ ФУНКЦІЮ window.exportCompareToExcel В КІНЦІ COMPARE.JS ===
 window.exportCompareToExcel = async function(workbook) {

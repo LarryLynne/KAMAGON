@@ -181,13 +181,16 @@ function updateAuthVisibility() {
     const userYard = sessionStorage.getItem('kamagonAuthYard');
     const loginBtn = document.getElementById('loginBtn');
 
+    // Жорсткий пошук контейнера з перемикачами
+    const virtualTypeRadios = document.querySelector('input[name="virtualFleetType"]');
+    const virtualFleetTypeContainer = virtualTypeRadios ? virtualTypeRadios.closest('.compact-checkbox') : null;
+
     const exportGroup = document.querySelector('.export-group');
     if (exportGroup && !document.getElementById('adminGoogleLink')) {
         const adminLink = document.createElement('a');
         adminLink.id = 'adminGoogleLink';
-        adminLink.href = 'https://docs.google.com/spreadsheets/d/1Pjp5PP1sCR5R9MORAG9JmgcPG4y0q955vJ-T8FajAXs/edit'; // Твоє посилання
+        adminLink.href = 'https://docs.google.com/spreadsheets/d/1Pjp5PP1sCR5R9MORAG9JmgcPG4y0q955vJ-T8FajAXs/edit';
         adminLink.target = '_blank';
-        // ДОДАЄМО НАШ НОВИЙ КЛАС btn-admin-db:
         adminLink.className = 'tab-btn btn-action btn-admin-db'; 
         adminLink.innerHTML = 'База Даних';
         exportGroup.insertBefore(adminLink, exportGroup.firstChild);
@@ -198,12 +201,10 @@ function updateAuthVisibility() {
         adminLinkNode.style.display = (isAuth && role === 'Адмін') ? 'inline-flex' : 'none';
     }
     
-    // 1. Базово переключаем элементы с классом auth-hidden
     document.querySelectorAll('.auth-hidden').forEach(el => {
         if (isAuth) el.classList.remove('auth-hidden');
     });
 
-    // Хватай все элементы интерфейса для разграничения прав
     const tabRaw = document.getElementById('tabRaw');
     const tabDetailed = document.getElementById('tabDetailed');
     const tabEvents = document.getElementById('tabEvents');
@@ -217,58 +218,59 @@ function updateAuthVisibility() {
     const tabCompare = document.getElementById('tabCompare');
 
     if (isAuth) {
-        if (isAuth) {
-            if (role === 'РДУ') {
-                // РДУ видит три вкладки: Розрахунок, Введення РДУ и Звірка
-                if (tabRaw) tabRaw.style.display = 'none';
-                if (tabDetailed) tabDetailed.style.display = 'none';
-                if (tabEvents) tabEvents.style.display = 'none';
-                if (tabFact) tabFact.style.display = 'none';
-                
-                if (tabKamag) tabKamag.style.display = 'block';
-                if (tabRdu) tabRdu.style.display = 'block';
-                if (tabCompare) tabCompare.style.display = 'block';
+        if (role === 'РДУ') {
+            if (tabRaw) tabRaw.style.display = 'none';
+            if (tabDetailed) tabDetailed.style.display = 'none';
+            if (tabEvents) tabEvents.style.display = 'none';
+            if (tabFact) tabFact.style.display = 'none';
+            
+            if (tabKamag) tabKamag.style.display = 'block';
+            if (tabRdu) tabRdu.style.display = 'block';
+            if (tabCompare) tabCompare.style.display = 'block';
 
-                if (fileInputLabel) fileInputLabel.style.display = 'none';
-                if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
-                if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'none';
-                if (document.getElementById('saveCustomGoogleBtn')) document.getElementById('saveCustomGoogleBtn').style.display = 'none';
-                if (document.getElementById('saveCustomFactGoogleBtn')) document.getElementById('saveCustomFactGoogleBtn').style.display = 'none';
+            if (fileInputLabel) fileInputLabel.style.display = 'none';
+            if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
+            if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'none';
 
-                const activeTab = document.querySelector('.tabs .tab-btn.active');
-                if (activeTab && (activeTab === tabRaw || activeTab === tabDetailed || activeTab === tabEvents || activeTab === tabFact)) {
-                    if (tabKamag) tabKamag.click();
-                }
-                enforceUserYardLock(userYard);
-            } else {
-                // Админ видит абсолютно всё
-                if (tabRaw) tabRaw.style.display = 'block';
-                if (tabDetailed) tabDetailed.style.display = 'block';
-                if (tabEvents) tabEvents.style.display = 'block';
-                if (tabKamag) tabKamag.style.display = 'block';
-                if (tabFact) tabFact.style.display = 'block';
-                if (tabRdu) tabRdu.style.display = (role === 'Адмін') ? 'block' : 'none';
-                if (tabCompare) tabCompare.style.display = 'block';
-
-                if (fileInputLabel) fileInputLabel.style.display = 'flex';
-                if (saveGoogleBtn) saveGoogleBtn.style.display = 'inline-flex';
-                if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'inline-flex';
-
-                ['kamagYardSelect', 'factYardSelect', 'compareYardSelect'].forEach(id => {
-                    const select = document.getElementById(id);
-                    if (select) select.disabled = false;
-                });
+            // ЖОРСТКЕ ПРИХОВУВАННЯ
+            if (virtualFleetTypeContainer) {
+                virtualFleetTypeContainer.style.setProperty('display', 'none', 'important');
             }
+
+            const activeTab = document.querySelector('.tabs .tab-btn.active');
+            if (activeTab && (activeTab === tabRaw || activeTab === tabDetailed || activeTab === tabEvents || activeTab === tabFact)) {
+                if (tabKamag) tabKamag.click();
+            }
+            enforceUserYardLock(userYard);
+        } else {
+            if (tabRaw) tabRaw.style.display = 'block';
+            if (tabDetailed) tabDetailed.style.display = 'block';
+            if (tabEvents) tabEvents.style.display = 'block';
+            if (tabKamag) tabKamag.style.display = 'block';
+            if (tabFact) tabFact.style.display = 'block';
+            if (tabRdu) tabRdu.style.display = (role === 'Адмін') ? 'block' : 'none';
+            if (tabCompare) tabCompare.style.display = 'block';
+
+            if (fileInputLabel) fileInputLabel.style.display = 'flex';
+            if (saveGoogleBtn) saveGoogleBtn.style.display = 'inline-flex';
+            if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'inline-flex';
+
+            // ВІДНОВЛЕННЯ ДЛЯ АДМІНА
+            if (virtualFleetTypeContainer) {
+                virtualFleetTypeContainer.style.setProperty('display', 'flex', 'important');
+            }
+
+            ['kamagYardSelect', 'factYardSelect', 'compareYardSelect'].forEach(id => {
+                const select = document.getElementById(id);
+                if (select) select.disabled = false;
+            });
         }
     } else {
-        // === ПРАВА ДЛЯ НЕАВТОРИЗОВАННЫХ ПОЛЬЗОВАТЕЛЕЙ (ГОСТЬ) ===
-        // Гость видит только вкладку "Розрахунок" (активна по умолчанию)
         if (fileInputLabel) fileInputLabel.style.display = 'none';
         if (saveGoogleBtn) saveGoogleBtn.style.display = 'none';
         if (saveAllGoogleBtn) saveAllGoogleBtn.style.display = 'none';
     }
 
-    // Обновляем плашку профиля в правом углу
     if (isAuth && loginBtn) {
         loginBtn.innerHTML = `${activeUser} (${role})`; 
         loginBtn.title = "Вийти з акаунту";
@@ -889,7 +891,7 @@ function switchTab(activeTabBtn, activeContainer) {
     
     activeTabBtn.classList.add('active');
     
-    if (activeContainer === containerKamag || activeContainer === containerFact || activeContainer === containerRdu) {
+    if (activeContainer === containerKamag || activeContainer === containerFact || activeContainer === containerRdu || activeContainer === containerCompare) {
         activeContainer.style.display = 'flex';
     } else {
         activeContainer.style.display = 'block';
