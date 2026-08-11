@@ -203,7 +203,11 @@ function renderRduGrid() {
     html += `<th style="background-color: #e2e8f0; font-weight:bold;">Σ, год</th></tr></thead><tbody>`;
 
     vehicleRows.forEach(v => {
-        html += `<tr><td style="font-weight:bold; background-color:#fff;">${v}</td>`;
+        // Перевіряємо, чи це додатковий транспорт, щоб показати кнопку видалення
+        const isVirtual = v.includes('(дод.)');
+        const deleteIcon = isVirtual ? `<span class="rdu-delete-btn" data-vehicle="${v}" style="cursor: pointer; color: #dc2626; font-size: 10px; float: right; margin-top: 2px;" title="Видалити ТЗ">❌</span>` : '';
+
+        html += `<tr><td style="font-weight:bold; background-color:#fff;">${v}${deleteIcon}</td>`;
         let dailySum = 0;
 
         for (let h = 0; h < 24; h++) {
@@ -220,6 +224,19 @@ function renderRduGrid() {
 
     html += `</tbody></table>`;
     wrapper.innerHTML = html;
+
+    // ДОДАЄМО ОБРОБНИК ДЛЯ КНОПОК ВИДАЛЕННЯ
+    document.querySelectorAll('.rdu-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const vehicleToDelete = e.target.getAttribute('data-vehicle');
+            if (confirm(`Ви впевнені, що хочете видалити ${vehicleToDelete}?`)) {
+                // Видаляємо рядок зі словника та перемальовуємо таблицю
+                delete rduStateMatrix[dateStr][vehicleToDelete];
+                renderRduGrid();
+                updateRduSaveButtonState();
+            }
+        });
+    });
 
     attachRduMouseEvents();
     updateRduSaveButtonState();

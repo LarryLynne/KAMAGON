@@ -350,19 +350,23 @@ function buildCompareTableHTML(vehicleRows, planFleet, rduFleet, datesList, plan
                 const pBit = planFleet[v][dStr][h];
                 const rBit = rduFleet[v][dStr][h];
                 
+                // Перевіряємо, чи є взагалі активність (система=1, ручна=2)
+                const pActive = pBit > 0;
+                const rActive = rBit > 0;
+                
                 let bgStyle = "";
                 let displayVal = "";
                 let borderStyle = h === 0 ? "border-left: 2px solid #6c757d;" : "";
 
-                if (pBit === 1 && rBit === 1) {
+                if (pActive && rActive) {
                     bgStyle = "background-color: #ea580c; color: #fff; font-weight: bold;"; 
                     displayVal = "1";
                     dayPlanHours++; dayRduHours++;
-                } else if (pBit === 0 && rBit === 1) {
+                } else if (!pActive && rActive) {
                     bgStyle = "background-color: #be123c; color: #fff; font-weight: bold;"; 
                     displayVal = "1";
                     dayRduHours++;
-                } else if (pBit === 1 && rBit === 0) {
+                } else if (pActive && !rActive) {
                     bgStyle = "background-color: #ffedd5; color: #9a3412; font-weight: bold; border: 1px solid #fed7aa;"; 
                     displayVal = "0";
                     dayPlanHours++;
