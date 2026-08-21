@@ -2479,7 +2479,7 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
                 }
                 sheet.addRow([]);
 
-                const excelOpsConfig = ["Всього операцій", "Задіяно фіз. КАМАГ", "Задіяно вірт. ЛЕГ", "Задіяно фіз. МАН", "Задіяно вірт. МАН", "Непокриті (фіз. флот)", "Непокриті (залишок)"];
+                const excelOpsConfig = ["Всього операцій", "Задіяно фіз. КАМАГ", "Задіяно вірт. КАМАГ", "Задіяно фіз. МАН", "Задіяно вірт. МАН", "Непокриті (фіз. флот)", "Непокриті (залишок)"];
                 excelOpsConfig.forEach(rowName => {
                     const row = sheet.addRow([rowName]); row.getCell(1).font = { bold: true, size: 10 };
                     let weekTotal = 0, oCol = 2;
